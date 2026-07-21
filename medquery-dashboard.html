@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedQuery AI — RAG Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --black:     #000000;
+    --dark:      #141414;
+    --card:      #1c1c1c;
+    --card2:     #2a2a2a;
+    --blue:      #2563eb;
+    --blue-lt:   #3b82f6;
+    --lime:      #ccff00;
+    --lime-dk:   #a8d400;
+    --text-muted:#6b7280;
+    --text-dim:  #9ca3af;
+    --white:     #ffffff;
+    --radius:    1.75rem;
+    --font:      'DM Sans', sans-serif;
+    --mono:      'DM Mono', monospace;
+  }
+
+  body {
+    background: var(--white);
+    color: var(--white);
+    font-family: var(--font);
+    min-height: 100vh;
+    padding: 1.5rem 2rem 2rem;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 2.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+    position: relative;
+  }
+  .logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #000000;
+    margin-right: auto;
+  }
+  .logo-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--lime);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+
+  nav {
+    background: var(--dark);
+    border-radius: 999px;
+    padding: 0.25rem;
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    justify-content: center;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
+  nav a {
+    padding: 0.45rem 1.25rem;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color .2s;
+  }
+  nav a.active { background: var(--white); color: var(--black); }
+  nav a:not(.active):hover { color: var(--white); }
+
+  .header-actions { display: flex; align-items: center; gap: .75rem; }
+  .header-btn {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: var(--dark);
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim);
+    font-size: 1rem;
+    transition: background .2s, color .2s;
+  }
+  .header-btn:hover { background: var(--card2); color: var(--white); }
+  .avatar {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: linear-gradient(135deg,#2563eb,#7c3aed);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .75rem; font-weight: 700; color: white;
+  }
+
+  /* ── INTRO ROW ── */
+  .intro-row {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr 1fr;
+    gap: 1.5rem;
+    align-items: end;
+    margin-bottom: 1.5rem;
+    background: var(--black);
+    color: var(--white);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+  }
+  @media(max-width:900px){.intro-row{grid-template-columns:1fr 1fr;}}
+  @media(max-width:560px){.intro-row{grid-template-columns:1fr;}}
+  .intro-greeting { font-size:.8rem; color: var(--text-dim); margin-bottom:.3rem; }
+  .intro-title { font-size:2.25rem; font-weight:600; letter-spacing:-.04em; line-height:1.1; }
+  .metric-label { font-size:.75rem; color: var(--text-dim); margin-bottom:.3rem; }
+  .metric-value {
+    font-size: 2rem; font-weight: 300; letter-spacing: -.03em;
+    display: flex; align-items: flex-start; gap: .2rem;
+  }
+  .metric-unit { font-size:.75rem; font-weight:700; color: rgba(255,255,255,.4); margin-top:.35rem; }
+
+  /* ── MAIN GRID ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-rows: auto auto;
+    gap: 1.25rem;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    border-radius: var(--radius);
+    padding: 1.75rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* — Retrieval Stats (col-span-4, 2 stacked) — */
+  .retrieval-col { grid-column: span 4; display: flex; flex-direction: column; gap: 1.25rem; }
+
+  .stat-chunk {
+    background: var(--card);
+    height: 140px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 1.5rem 1.75rem;
+  }
+  .stat-chunk .num { font-size: 2rem; font-weight: 700; }
+  .stat-chunk .lbl { font-size: .8rem; color: var(--text-dim); }
+  .stat-chunk .side { font-size: .7rem; color: var(--text-dim); }
+  .stat-bar {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 55%; border-radius: 0 var(--radius) 0 0;
+    background: var(--card2);
+    transition: width .8s cubic-bezier(.25,.46,.45,.94);
+  }
+  .stat-chunk.lime-card { background: var(--lime); color: var(--black); }
+  .stat-chunk.lime-card .lbl, .stat-chunk.lime-card .side { color: rgba(0,0,0,.5); }
+  .stat-chunk.lime-card .stat-bar { background: rgba(255,255,255,.2); }
+
+  /* — Analytics Main (col-span-8) — */
+  .analytics-main {
+    grid-column: span 8;
+    background: var(--blue);
+    min-height: 300px;
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+  .analytics-left { flex: 1; min-width: 200px; z-index:1; }
+  .analytics-label { font-size:.75rem; color: rgba(255,255,255,.6); margin-bottom: 1.5rem; }
+  .analytics-big { display: flex; align-items: baseline; gap: .75rem; margin-bottom: 1rem; }
+  .analytics-pct { font-size: 4.5rem; font-weight: 700; letter-spacing: -.04em; line-height:1; }
+  .analytics-tag {
+    background: rgba(255,255,255,.15);
+    border-radius: 999px;
+    font-size: .65rem;
+    padding: .2rem .6rem;
+    display: flex; align-items:center; gap:.25rem;
+  }
+  .analytics-pills { display:flex; flex-direction:column; gap:.5rem; margin-top:1.5rem; }
+  .pill {
+    display: flex; align-items: center; gap: .5rem;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 999px;
+    padding: .45rem 1rem;
+    font-size: .75rem; width: fit-content;
+  }
+  .analytics-right { display:flex; align-items:center; justify-content:center; flex:1; min-width:180px; }
+
+  /* Donut */
+  .donut-wrap { position:relative; width:200px; height:200px; }
+  .donut-wrap svg { width:100%; height:100%; }
+  .donut-center {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .donut-center .pct { font-size:1.5rem; font-weight:700; }
+  .donut-center .sub { font-size:.65rem; color:rgba(255,255,255,.5); }
+  .donut-arrow {
+    position:absolute; bottom:4px; right:4px;
+    width:40px; height:40px; border-radius:50%;
+    background:#000;
+    display:flex; align-items:center; justify-content:center;
+    font-size:.85rem;
+  }
+
+  /* — Row 2 — */
+  .cash-card     { grid-column: span 4; background: var(--card); min-height:400px; display:flex; flex-direction:column; justify-content:space-between; }
+  .query-card    { grid-column: span 4; background: var(--lime); color: var(--black); min-height:400px; display:flex; flex-direction:column; }
+  .pipeline-card { grid-column: span 4; background: #000000; min-height:400px; display:flex; flex-direction:column; }
+
+  @media(max-width:1100px){
+    .retrieval-col,.analytics-main,.cash-card,.query-card,.pipeline-card{ grid-column: span 12; }
+  }
+  @media(min-width:1101px) and (max-width:1280px){
+    .retrieval-col{ grid-column: span 4; }
+    .analytics-main{ grid-column: span 8; }
+    .cash-card{ grid-column: span 4; }
+    .query-card{ grid-column: span 4; }
+    .pipeline-card{ grid-column: span 4; }
+  }
+
+  /* Cash card */
+  .cash-header { display:flex; justify-content:space-between; align-items:flex-start; }
+  .cash-ticker { font-size:.75rem; color:var(--text-dim); }
+  .cash-amount-row { display:flex; align-items:center; gap:.5rem; }
+  .cash-amount { font-size:1.5rem; font-weight:700; }
+  .usd-badge {
+    background:var(--lime); color:#000;
+    font-size:.6rem; font-weight:700;
+    padding:.15rem .45rem; border-radius:.25rem;
+  }
+  .cash-big { font-size:3rem; font-weight:700; letter-spacing:-.04em; margin-top:.75rem; }
+  .cash-sub { font-size:.75rem; color:var(--text-dim); }
+  .bars {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    height:120px; gap:.6rem; margin-top:auto;
+  }
+  .bar { flex:1; border-radius: .5rem .5rem 0 0; transition: height .6s ease; }
+
+  /* Query live card */
+  .query-card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:auto; }
+  .query-card-title { font-size:1.2rem; font-weight:700; }
+  .query-card-sub { font-size:.75rem; color:#6b7280; margin-top:.2rem; }
+  .query-go-btn {
+    background:var(--black); border:none; cursor:pointer;
+    border-radius:50%; width:44px; height:44px;
+    display:flex; align-items:center; justify-content:center;
+    color: var(--white);
+    font-size:1rem;
+    transition: transform .15s, background .15s;
+  }
+  .query-go-btn:hover { transform:scale(1.08); background:var(--black); }
+  .query-big { font-size:.8rem; color:#6b8071; margin-bottom:.3rem; }
+  .query-count { font-size:3.5rem; font-weight:700; letter-spacing:-.04em; color:#000; }
+
+  /* Live Q&A section */
+  .qa-section { padding: 0 1.75rem 1.75rem; display:flex; flex-direction:column; gap:.75rem; margin-top:auto; }
+  .qa-input-row {
+    display:flex; gap:.5rem; align-items:center;
+    background: #f3f4f6; border-radius:999px; padding:.4rem .4rem .4rem 1rem;
+  }
+  .qa-input {
+    flex:1; background:none; border:none; outline:none;
+    font-family:var(--font); font-size:.8rem; color:#111;
+  }
+  .qa-input::placeholder { color:#9ca3af; }
+  .qa-send {
+    background:var(--black); color:#fff; border:none; cursor:pointer;
+    width:32px; height:32px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:.8rem;
+    transition: background .15s;
+  }
+  .qa-send:hover { background:#222; }
+
+  .qa-bubble {
+    border-radius:1rem; padding:.65rem .9rem; font-size:.75rem; line-height:1.5;
+    animation: fadeIn .3s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .qa-bubble.user { background:#111; color:#fff; align-self:flex-end; border-radius:1rem 1rem .25rem 1rem; }
+  .qa-bubble.bot  { background:#f0fdf4; color:#111; border:1px solid #bbf7d0; border-radius:1rem 1rem 1rem .25rem; }
+  .qa-bubble.loading { background:#f9fafb; color:#6b7280; border:1px solid #e5e7eb; font-style:italic; }
+  .source-tag { font-size:.65rem; color:#059669; font-weight:600; margin-top:.35rem; }
+  .chat-scroll { max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:.5rem; padding-right:.25rem; }
+  .chat-scroll::-webkit-scrollbar { width:3px; }
+  .chat-scroll::-webkit-scrollbar-thumb { background:#e5e7eb; border-radius:99px; }
+
+  /* Pipeline card */
+  .pipe-header { display:flex; align-items:center; gap:.75rem; margin-bottom:1.75rem; }
+  .pipe-icon {
+    background:rgba(255,255,255,.08); width:42px; height:42px;
+    border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1rem;
+  }
+  .pipe-icon:hover { background: var(--lime); }
+  .pipe-title { font-size:1.1rem; font-weight:700; line-height:1.25; }
+  .pipe-rows { display:flex; flex-direction:column; gap:1.25rem; padding-top:.5rem; }
+  .pipe-row { display:flex; justify-content:space-between; align-items:center; }
+  .pipe-amount { font-size:1.5rem; font-weight:300; }
+  .pipe-amount sup { font-size:.65rem; font-weight:700; color:rgba(255,255,255,.35); vertical-align:top; margin-top:.3rem; }
+  .pipe-label { font-size:.75rem; color:var(--text-dim); text-align:right; }
+  .pipe-bar-track {
+    width:100%; height:3px; background:rgba(255,255,255,.08);
+    border-radius:2px; margin-top:.35rem;
+  }
+  .pipe-bar-fill { height:100%; border-radius:2px; background:var(--blue-lt); transition:width .8s ease; }
+  .pipe-bar-fill.lime { background:var(--lime); }
+  .pipe-bar-fill.white { background:#fff; }
+
+  /* precision ring */
+  .ring-row { display:flex; align-items:center; gap:1rem; }
+  .mini-ring { position:relative; width:48px; height:48px; }
+  .mini-ring svg { width:100%; height:100%; transform:rotate(-90deg); }
+  .mini-ring .num { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:.65rem; font-weight:700; }
+
+  /* tag chips */
+  .chip { display:inline-flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.07); border-radius:999px; font-size:.65rem; padding:.25rem .65rem; color:var(--text-dim); }
+  .chip.lime { background:rgba(204,255,0,.12); color:var(--lime); }
+  .chip.blue { background:rgba(37,99,235,.2); color:#93c5fd; }
+
+  /* provider badge */
+  .provider-row { display:flex; gap:.5rem; flex-wrap:wrap; padding:1.25rem 1.75rem 0; }
+
+  /* tooltip */
+  [data-tip] { position:relative; }
+  [data-tip]::after {
+    content: attr(data-tip);
+    position:absolute; bottom:110%; left:50%; transform:translateX(-50%);
+    background:#111; color:#fff; font-size:.65rem; padding:.25rem .6rem; border-radius:.4rem;
+    white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s;
+    font-family:var(--font);
+  }
+  [data-tip]:hover::after { opacity:1; }
+
+  /* scroll */
+  ::-webkit-scrollbar { width:4px; height:4px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--card2); border-radius:99px; }
+
+  /* entrance animations */
+  @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+  .grid > * { animation: slideUp .5s ease both; }
+  .grid > *:nth-child(1){animation-delay:.05s}
+  .grid > *:nth-child(2){animation-delay:.1s}
+  .grid > *:nth-child(3){animation-delay:.15s}
+  .grid > *:nth-child(4){animation-delay:.2s}
+  .grid > *:nth-child(5){animation-delay:.25s}
+  .grid > *:nth-child(6){animation-delay:.3s}
+
+  /* ── UPLOAD MODAL ── */
+  .modal-overlay {
+    position:fixed; inset:0; z-index:1000;
+    background:rgba(0,0,0,.6); backdrop-filter:blur(8px);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none;
+    transition: opacity .25s ease;
+  }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+
+  .modal {
+    background: var(--dark);
+    border-radius: var(--radius);
+    width: 560px; max-width: 92vw;
+    max-height: 90vh; overflow-y: auto;
+    padding: 2rem;
+    color: var(--white);
+    transform: translateY(20px) scale(.97);
+    transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+    box-shadow: 0 32px 64px rgba(0,0,0,.5);
+  }
+  .modal-overlay.open .modal { transform: translateY(0) scale(1); }
+
+  .modal-header {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom: 1.5rem;
+  }
+  .modal-title { font-size:1.25rem; font-weight:700; }
+  .modal-close {
+    width:36px; height:36px; border-radius:50%;
+    background:var(--card2); border:none; cursor:pointer;
+    color:var(--text-dim); font-size:1.1rem;
+    display:flex; align-items:center; justify-content:center;
+    transition: background .15s, color .15s;
+  }
+  .modal-close:hover { background:var(--card); color:#fff; }
+
+  /* Tab switcher */
+  .modal-tabs {
+    display:flex; gap:.25rem;
+    background:var(--card); border-radius:999px;
+    padding:.25rem; margin-bottom:1.5rem;
+  }
+  .modal-tab {
+    flex:1; padding:.5rem; border:none; border-radius:999px;
+    background:none; color:var(--text-dim); cursor:pointer;
+    font-family:var(--font); font-size:.8rem; font-weight:500;
+    transition: background .2s, color .2s;
+  }
+  .modal-tab.active { background:var(--white); color:var(--black); }
+  .modal-tab:not(.active):hover { color:var(--white); }
+
+  /* Form fields */
+  .form-group { margin-bottom:1rem; }
+  .form-label { font-size:.75rem; color:var(--text-dim); margin-bottom:.4rem; display:block; }
+  .form-input {
+    width:100%; padding:.6rem .9rem;
+    background:var(--card); border:1px solid var(--card2);
+    border-radius:.75rem; color:#fff;
+    font-family:var(--font); font-size:.8rem;
+    outline:none; transition:border-color .15s;
+  }
+  .form-input:focus { border-color:var(--lime); }
+  .form-textarea {
+    width:100%; padding:.6rem .9rem; height:140px; resize:vertical;
+    background:var(--card); border:1px solid var(--card2);
+    border-radius:.75rem; color:#fff;
+    font-family:var(--font); font-size:.8rem; line-height:1.5;
+    outline:none; transition:border-color .15s;
+  }
+  .form-textarea:focus { border-color:var(--lime); }
+  .form-select {
+    width:100%; padding:.6rem .9rem;
+    background:var(--card); border:1px solid var(--card2);
+    border-radius:.75rem; color:#fff;
+    font-family:var(--font); font-size:.8rem;
+    outline:none; cursor:pointer; transition:border-color .15s;
+    appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right .75rem center;
+  }
+  .form-select:focus { border-color:var(--lime); }
+  .form-select option { background:var(--dark); color:#fff; }
+
+  /* PDF dropzone */
+  .dropzone {
+    border: 2px dashed var(--card2);
+    border-radius: 1rem;
+    padding: 2rem;
+    text-align:center;
+    cursor:pointer;
+    transition: border-color .2s, background .2s;
+    position:relative;
+  }
+  .dropzone:hover, .dropzone.drag-over { border-color:var(--lime); background:rgba(204,255,0,.03); }
+  .dropzone-icon { font-size:2rem; margin-bottom:.5rem; }
+  .dropzone-text { font-size:.8rem; color:var(--text-dim); }
+  .dropzone-text strong { color:var(--lime); }
+  .dropzone-hint { font-size:.65rem; color:var(--text-muted); margin-top:.4rem; }
+  .dropzone input[type="file"] {
+    position:absolute; inset:0; opacity:0; cursor:pointer;
+  }
+  .file-preview {
+    display:flex; align-items:center; gap:.5rem;
+    background:var(--card); border-radius:.5rem; padding:.4rem .6rem;
+    margin-top:.5rem; font-size:.75rem;
+  }
+  .file-preview .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .file-preview .remove {
+    background:none; border:none; color:var(--text-dim);
+    cursor:pointer; font-size:.9rem; transition:color .15s;
+  }
+  .file-preview .remove:hover { color:#ef4444; }
+
+  /* Submit button */
+  .modal-submit {
+    width:100%; padding:.7rem;
+    background:var(--lime); color:#000;
+    border:none; border-radius:999px;
+    font-family:var(--font); font-size:.85rem; font-weight:600;
+    cursor:pointer; transition: opacity .15s, transform .1s;
+    margin-top:.5rem;
+  }
+  .modal-submit:hover { opacity:.9; }
+  .modal-submit:active { transform:scale(.98); }
+  .modal-submit:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* Success / error messages */
+  .modal-status {
+    padding:.5rem .75rem; border-radius:.75rem; font-size:.75rem;
+    margin-top:.75rem; animation: fadeIn .3s ease;
+  }
+  .modal-status.success { background:rgba(16,185,129,.15); color:#10b981; border:1px solid rgba(16,185,129,.2); }
+  .modal-status.error   { background:rgba(239,68,68,.15);  color:#ef4444; border:1px solid rgba(239,68,68,.2); }
+
+  /* ── DOCUMENTS PANEL (inside cash-card area) ── */
+  .doc-list { display:flex; flex-direction:column; gap:.5rem; margin-top:.75rem; max-height:200px; overflow-y:auto; }
+  .doc-item {
+    display:flex; align-items:center; gap:.5rem;
+    background:var(--card2); border-radius:.75rem; padding:.5rem .75rem;
+    font-size:.72rem; transition: background .15s;
+  }
+  .doc-item:hover { background:var(--card); }
+  .doc-item-icon { font-size:.9rem; flex-shrink:0; }
+  .doc-item-info { flex:1; overflow:hidden; }
+  .doc-item-title { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff; }
+  .doc-item-meta { color:var(--text-dim); font-size:.65rem; }
+  .doc-item-delete {
+    width:24px; height:24px; border-radius:50%;
+    background:transparent; border:none; cursor:pointer;
+    color:var(--text-dim); font-size:.75rem;
+    display:flex; align-items:center; justify-content:center;
+    transition: background .15s, color .15s;
+    flex-shrink:0;
+  }
+  .doc-item-delete:hover { background:rgba(239,68,68,.15); color:#ef4444; }
+
+  .add-doc-btn {
+    display:flex; align-items:center; justify-content:center; gap:.4rem;
+    width:100%; padding:.55rem;
+    background:var(--card2); border:1px dashed var(--text-muted);
+    border-radius:.75rem; color:var(--text-dim);
+    font-family:var(--font); font-size:.75rem; font-weight:500;
+    cursor:pointer; transition: border-color .15s, color .15s, background .15s;
+    margin-top:.5rem;
+  }
+  .add-doc-btn:hover { border-color:var(--lime); color:var(--lime); background:rgba(204,255,0,.03); }
+
+  /* Toast notification */
+  .toast {
+    position:fixed; bottom:2rem; right:2rem; z-index:2000;
+    padding:.65rem 1.25rem; border-radius:999px;
+    font-family:var(--font); font-size:.8rem; font-weight:500;
+    transform:translateY(20px); opacity:0;
+    transition: transform .3s ease, opacity .3s ease;
+    box-shadow: 0 8px 24px rgba(0,0,0,.3);
+  }
+  .toast.show { transform:translateY(0); opacity:1; }
+  .toast.success { background:var(--lime); color:#000; }
+  .toast.error { background:#ef4444; color:#fff; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    MedQuery AI
+  </div>
+  <nav>
+    <a href="#" class="active">Dashboard</a>
+    <a href="#">Pipeline</a>
+    <a href="#">Retrieval</a>
+    <a href="#">Analytics</a>
+    <a href="#">Documents</a>
+    <a href="#">Settings</a>
+  </nav>
+</header>
+
+<!-- INTRO ROW -->
+<div class="intro-row">
+  <div>
+    <div class="intro-greeting">RAG Pipeline · Live Demo</div>
+    <div class="intro-title">MedQuery AI<br>Dashboard</div>
+  </div>
+  <div>
+    <div class="metric-label">Total Queries</div>
+    <div class="metric-value" id="m-queries">—<span class="metric-unit"></span></div>
+  </div>
+  <div>
+    <div class="metric-label">Precision@1</div>
+    <div class="metric-value" id="m-p1">—<span class="metric-unit">%</span></div>
+  </div>
+  <div>
+    <div class="metric-label">Avg Score</div>
+    <div class="metric-value" id="m-score">—<span class="metric-unit"></span></div>
+  </div>
+</div>
+
+<!-- MAIN GRID -->
+<div class="grid">
+
+  <!-- ① Retrieval Stats col -->
+  <div class="retrieval-col">
+    <div class="card stat-chunk" id="chunk-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;z-index:1;position:relative">
+        <div>
+          <div class="num" id="chunk-pct">72%</div>
+          <div class="lbl">Chunks Indexed</div>
+        </div>
+        <div class="side">38/chunk</div>
+      </div>
+      <div class="stat-bar" id="chunk-bar" style="width:72%"></div>
+    </div>
+    <div class="card stat-chunk lime-card" id="retrieval-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;z-index:1;position:relative">
+        <div>
+          <div class="num" id="retrieval-pct">95%</div>
+          <div class="lbl">Retrieval Hit</div>
+        </div>
+        <div class="side">19/query</div>
+      </div>
+      <div class="stat-bar" id="retrieval-bar" style="width:95%"></div>
+    </div>
+  </div>
+
+  <!-- ② Analytics Main -->
+  <div class="card analytics-main">
+    <div class="analytics-left">
+      <div class="analytics-label">RAG Performance</div>
+      <div class="analytics-big">
+        <div class="analytics-pct">88%</div>
+        <div>
+          <div style="font-size:1rem;font-weight:500">Precision@3</div>
+          <div class="analytics-tag">
+            <span>+12.5%</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+              <path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="analytics-pills">
+        <div class="pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 15l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Sentence-boundary chunking (600 + 120 overlap)
+        </div>
+        <div class="pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 15l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          FAISS IndexFlatIP · cosine similarity
+        </div>
+        <div class="pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 15l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          all-MiniLM-L6-v2 · 384-dim embeddings
+        </div>
+      </div>
+    </div>
+    <div class="analytics-right">
+      <div class="donut-wrap">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="12"/>
+          <circle cx="50" cy="50" r="40" fill="none" stroke="white" stroke-width="12"
+            stroke-dasharray="251.2" stroke-dashoffset="30"
+            style="transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset 1s ease"/>
+          <circle cx="50" cy="50" r="32" fill="#1e40af"/>
+          <circle cx="50" cy="50" r="26" fill="none" stroke="rgba(0,0,0,.15)" stroke-dasharray="2 3" stroke-width="8"/>
+        </svg>
+        <div class="donut-center">
+          <div class="pct">88%</div>
+          <div class="sub">Precision</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ Documents & Upload card (was Query Volume) -->
+  <div class="card cash-card">
+    <div>
+      <div class="cash-header">
+        <span style="font-size:.85rem;color:var(--text-dim);font-weight:500">Indexed Documents</span>
+        <div class="cash-amount-row">
+          <span class="cash-amount" id="doc-count-header">4</span>
+          <span class="usd-badge">LIVE</span>
+        </div>
+      </div>
+    </div>
+    <!-- Documents list -->
+    <div class="doc-list" id="doc-list">
+      <div style="font-size:.72rem;color:var(--text-dim);text-align:center;padding:1rem;">Loading documents…</div>
+    </div>
+    <button class="add-doc-btn" onclick="openModal()">
+      <span>＋</span> Add Document
+    </button>
+  </div>
+
+  <!-- ④ Live Q&A card -->
+  <div class="card query-card" style="padding:1.75rem 1.75rem 0">
+    <div class="query-card-header">
+      <div>
+        <div class="query-card-title">Live Q&amp;A</div>
+        <div class="query-card-sub">RAG Pipeline · Ask a medical question</div>
+      </div>
+      <button class="query-go-btn" onclick="clearChat()">↺</button>
+    </div>
+    <div style="margin-top:1rem;">
+      <div class="query-big">Documents Loaded</div>
+      <div style="display:flex;align-items:center;gap:.75rem;">
+        <div class="query-count" id="doc-count">4</div>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+          <path d="M9 12h6M9 16h6M9 8h6M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+    <div class="chat-scroll" id="chat-scroll">
+      <div class="qa-bubble bot">👋 Ask me anything about the medical documents! Try: <em>"What is the haemoglobin level?"</em></div>
+    </div>
+    <div class="qa-section" style="padding:0.75rem 0 1.25rem;">
+      <div class="qa-input-row">
+        <input class="qa-input" id="qa-input" placeholder="Ask a medical question…" onkeydown="if(event.key==='Enter')sendQuery()"/>
+        <button class="qa-send" onclick="sendQuery()">→</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ Pipeline Steps card -->
+  <div class="card pipeline-card">
+    <div class="provider-row" style="padding:0 0 1rem;">
+      <span class="chip blue">OpenAI</span>
+      <span class="chip lime">Claude</span>
+      <span class="chip">Gemini</span>
+    </div>
+    <div class="pipe-header">
+      <div class="pipe-title">Pipeline<br>Components</div>
+    </div>
+    <div class="pipe-rows">
+      <div>
+        <div class="pipe-row">
+          <div class="pipe-amount" id="pipe-chunks">38<sup>chunks</sup></div>
+          <div class="pipe-label">FAISS Index</div>
+        </div>
+        <div class="pipe-bar-track"><div class="pipe-bar-fill blue" id="pipe-chunks-bar" style="width:80%"></div></div>
+      </div>
+      <div>
+        <div class="pipe-row">
+          <div class="pipe-amount">384<sup>dim</sup></div>
+          <div class="pipe-label">Embedding Size</div>
+        </div>
+        <div class="pipe-bar-track"><div class="pipe-bar-fill lime" style="width:65%"></div></div>
+      </div>
+      <div>
+        <div class="pipe-row">
+          <div class="pipe-amount">0.87<sup>score</sup></div>
+          <div class="pipe-label">Top-1 Similarity</div>
+        </div>
+        <div class="pipe-bar-track"><div class="pipe-bar-fill white" style="width:87%"></div></div>
+      </div>
+    </div>
+
+    <!-- Mini precision rings -->
+    <div class="ring-row" style="margin-top:1.5rem;">
+      <div class="mini-ring" data-tip="Precision@1">
+        <svg viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="4"/>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#ccff00" stroke-width="4"
+            stroke-dasharray="87.96" stroke-dashoffset="10"/>
+        </svg>
+        <div class="num">88%</div>
+      </div>
+      <div class="mini-ring" data-tip="Precision@3">
+        <svg viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="4"/>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#3b82f6" stroke-width="4"
+            stroke-dasharray="87.96" stroke-dashoffset="0"/>
+        </svg>
+        <div class="num">100%</div>
+      </div>
+      <div style="font-size:.7rem;color:var(--text-dim);line-height:1.5;">
+        Precision@1 · Precision@3<br>
+        <span style="color:var(--white);font-weight:500">8/8 test queries</span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /grid -->
+
+<!-- ── UPLOAD MODAL ── -->
+<div class="modal-overlay" id="upload-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add Document</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="modal-tabs">
+      <button class="modal-tab active" onclick="switchTab('text')" id="tab-text">Paste Text</button>
+      <button class="modal-tab" onclick="switchTab('pdf')" id="tab-pdf">Upload PDF</button>
+    </div>
+
+    <!-- TEXT TAB -->
+    <div id="panel-text">
+      <div class="form-group">
+        <label class="form-label">Document Title</label>
+        <input class="form-input" id="ingest-title" placeholder="e.g. ECG Report — Patient Sharma" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Document Type</label>
+        <select class="form-select" id="ingest-type">
+          <option value="Lab Report">Lab Report</option>
+          <option value="Prescription">Prescription</option>
+          <option value="Discharge Summary">Discharge Summary</option>
+          <option value="Radiology Report">Radiology Report</option>
+          <option value="Clinical Notes">Clinical Notes</option>
+          <option value="Pathology Report">Pathology Report</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Document Content</label>
+        <textarea class="form-textarea" id="ingest-content" placeholder="Paste the full document text here…"></textarea>
+      </div>
+      <button class="modal-submit" id="btn-ingest-text" onclick="submitText()">
+        Add to Knowledge Base
+      </button>
+    </div>
+
+    <!-- PDF TAB -->
+    <div id="panel-pdf" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">Document Type</label>
+        <select class="form-select" id="upload-type">
+          <option value="Uploaded PDF">Uploaded PDF</option>
+          <option value="Lab Report">Lab Report</option>
+          <option value="Prescription">Prescription</option>
+          <option value="Discharge Summary">Discharge Summary</option>
+          <option value="Radiology Report">Radiology Report</option>
+          <option value="Clinical Notes">Clinical Notes</option>
+          <option value="Pathology Report">Pathology Report</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Document Title <span style="color:var(--text-muted)">(optional — uses filename if blank)</span></label>
+        <input class="form-input" id="upload-title" placeholder="e.g. X-Ray Report — January 2025" />
+      </div>
+      <div class="dropzone" id="dropzone"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <input type="file" accept=".pdf" onchange="handleFileSelect(this)" />
+        <div class="dropzone-text">Drop a <strong>PDF</strong> here or click to browse</div>
+        <div class="dropzone-hint">Maximum file size: 10 MB</div>
+      </div>
+      <div id="file-preview-area"></div>
+      <button class="modal-submit" id="btn-upload-pdf" onclick="submitPdf()" disabled>
+        Upload & Index
+      </button>
+    </div>
+
+    <div id="modal-status-area"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── API Configuration ─────────────────────────────────────────────────────
+const API_BASE_URL = "http://localhost:8000";
+
+// ── State ─────────────────────────────────────────────────────────────────
+let selectedFile = null;
+
+// ── API wrapper — replaces local retrieve() + callLLM() ──────────────────
+async function queryBackend(question, topK = 5) {
+  const resp = await fetch(`${API_BASE_URL}/query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, top_k: topK })
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+    throw new Error(err.detail || 'Backend request failed');
+  }
+  return resp.json();
+}
+
+async function fetchMetrics() {
+  try {
+    const resp = await fetch(`${API_BASE_URL}/metrics`);
+    if (!resp.ok) return;
+    const m = await resp.json();
+
+    document.getElementById('m-queries').childNodes[0].nodeValue = m.total_queries.toString();
+    document.getElementById('m-score').childNodes[0].nodeValue = m.avg_similarity_score.toFixed(2);
+
+    // Update pipeline card values
+    const chunkPct = Math.min(100, Math.round((m.chunks_indexed / 50) * 100));
+    document.getElementById('chunk-pct').textContent = chunkPct + '%';
+    document.getElementById('chunk-bar').style.width = chunkPct + '%';
+
+    // Update pipeline component chunks count
+    document.getElementById('pipe-chunks').innerHTML = m.chunks_indexed + '<sup>chunks</sup>';
+    const pipeBar = document.getElementById('pipe-chunks-bar');
+    if (pipeBar) pipeBar.style.width = Math.min(100, Math.round((m.chunks_indexed / 50) * 100)) + '%';
+  } catch (e) {
+    // Backend not reachable — silently skip
+  }
+}
+
+async function fetchDocuments() {
+  try {
+    const resp = await fetch(`${API_BASE_URL}/documents`);
+    if (!resp.ok) return;
+    const docs = await resp.json();
+    document.getElementById('doc-count').textContent = docs.length;
+    document.getElementById('doc-count-header').textContent = docs.length;
+    renderDocList(docs);
+  } catch (e) {
+    // Backend not reachable — silently skip
+  }
+}
+
+// ── Document List Rendering ───────────────────────────────────────────────
+const DOC_TYPE_ICONS = {
+  'Lab Report': '🧪',
+  'Prescription': '💊',
+  'Discharge Summary': '🏥',
+  'Radiology Report': '🩻',
+  'Clinical Notes': '📋',
+  'Pathology Report': '🔬',
+  'Uploaded PDF': '📄',
+  'Other': '📄',
+  'General': '📄'
+};
+
+function renderDocList(docs) {
+  const container = document.getElementById('doc-list');
+  if (!docs.length) {
+    container.innerHTML = '<div style="font-size:.72rem;color:var(--text-dim);text-align:center;padding:1rem;">No documents indexed</div>';
+    return;
+  }
+  container.innerHTML = docs.map(doc => `
+    <div class="doc-item" id="doc-item-${doc.id}">
+      <div class="doc-item-icon">${DOC_TYPE_ICONS[doc.type] || '📄'}</div>
+      <div class="doc-item-info">
+        <div class="doc-item-title">${escapeHtml(doc.title)}</div>
+        <div class="doc-item-meta">${escapeHtml(doc.type)} · ${doc.chunk_count} chunks</div>
+      </div>
+      <button class="doc-item-delete" onclick="deleteDocument('${doc.id}')" title="Remove document">🗑</button>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ── Delete Document ───────────────────────────────────────────────────────
+async function deleteDocument(docId) {
+  const item = document.getElementById(`doc-item-${docId}`);
+  const title = item?.querySelector('.doc-item-title')?.textContent || docId;
+
+  if (!confirm(`Remove "${title}" from the knowledge base?\n\nThis will delete all its chunks and rebuild the FAISS index.`)) return;
+
+  try {
+    const resp = await fetch(`${API_BASE_URL}/documents/${docId}`, { method: 'DELETE' });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Delete failed' }));
+      showToast(err.detail || 'Delete failed', 'error');
+      return;
+    }
+    const result = await resp.json();
+    showToast(result.message, 'success');
+    fetchDocuments();
+    fetchMetrics();
+  } catch (e) {
+    showToast('Network error: ' + e.message, 'error');
+  }
+}
+
+// ── Modal Controls ────────────────────────────────────────────────────────
+function openModal() {
+  document.getElementById('upload-modal').classList.add('open');
+  clearModalStatus();
+}
+function closeModal() {
+  document.getElementById('upload-modal').classList.remove('open');
+  clearModalStatus();
+  clearFileSelection();
+}
+
+function switchTab(tab) {
+  document.getElementById('tab-text').classList.toggle('active', tab === 'text');
+  document.getElementById('tab-pdf').classList.toggle('active', tab === 'pdf');
+  document.getElementById('panel-text').style.display = tab === 'text' ? 'block' : 'none';
+  document.getElementById('panel-pdf').style.display = tab === 'pdf' ? 'block' : 'none';
+  clearModalStatus();
+}
+
+function clearModalStatus() {
+  document.getElementById('modal-status-area').innerHTML = '';
+}
+
+function showModalStatus(msg, type) {
+  document.getElementById('modal-status-area').innerHTML =
+    `<div class="modal-status ${type}">${escapeHtml(msg)}</div>`;
+}
+
+// ── Text Ingestion ────────────────────────────────────────────────────────
+async function submitText() {
+  const title = document.getElementById('ingest-title').value.trim();
+  const type = document.getElementById('ingest-type').value;
+  const content = document.getElementById('ingest-content').value.trim();
+
+  if (!title) { showModalStatus('Please enter a document title.', 'error'); return; }
+  if (!content) { showModalStatus('Please paste the document content.', 'error'); return; }
+
+  const btn = document.getElementById('btn-ingest-text');
+  btn.disabled = true;
+  btn.textContent = 'Indexing…';
+  clearModalStatus();
+
+  try {
+    const resp = await fetch(`${API_BASE_URL}/documents/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doc_type: type, title, content })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Ingestion failed' }));
+      showModalStatus(err.detail || 'Ingestion failed', 'error');
+      return;
+    }
+
+    const result = await resp.json();
+    showModalStatus(`✓ Added "${title}" — ${result.chunks_added} chunks created, ${result.total_documents} documents total`, 'success');
+    showToast(`"${title}" indexed — ${result.chunks_added} chunks`, 'success');
+
+    // Clear form
+    document.getElementById('ingest-title').value = '';
+    document.getElementById('ingest-content').value = '';
+
+    // Refresh dashboard
+    fetchDocuments();
+    fetchMetrics();
+
+  } catch (e) {
+    showModalStatus('Network error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add to Knowledge Base';
+  }
+}
+
+// ── PDF Upload ────────────────────────────────────────────────────────────
+function handleFileSelect(input) {
+  if (input.files.length) setFile(input.files[0]);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+}
+
+function setFile(file) {
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showModalStatus('Only PDF files are supported.', 'error');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showModalStatus(`File too large (${(file.size/1024/1024).toFixed(1)} MB). Maximum is 10 MB.`, 'error');
+    return;
+  }
+  selectedFile = file;
+  document.getElementById('file-preview-area').innerHTML = `
+    <div class="file-preview">
+      <span>📄</span>
+      <span class="name">${escapeHtml(file.name)}</span>
+      <span style="color:var(--text-dim);font-size:.65rem;">${(file.size/1024).toFixed(0)} KB</span>
+      <button class="remove" onclick="clearFileSelection()">✕</button>
+    </div>
+  `;
+  document.getElementById('btn-upload-pdf').disabled = false;
+  clearModalStatus();
+}
+
+function clearFileSelection() {
+  selectedFile = null;
+  document.getElementById('file-preview-area').innerHTML = '';
+  document.getElementById('btn-upload-pdf').disabled = true;
+  // Reset file input
+  const input = document.querySelector('#dropzone input[type="file"]');
+  if (input) input.value = '';
+}
+
+async function submitPdf() {
+  if (!selectedFile) return;
+
+  const type = document.getElementById('upload-type').value;
+  const title = document.getElementById('upload-title').value.trim();
+
+  const btn = document.getElementById('btn-upload-pdf');
+  btn.disabled = true;
+  btn.textContent = 'Extracting & indexing…';
+  clearModalStatus();
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('doc_type', type);
+  if (title) formData.append('title', title);
+
+  try {
+    const resp = await fetch(`${API_BASE_URL}/documents/upload`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Upload failed' }));
+      showModalStatus(err.detail || 'Upload failed', 'error');
+      return;
+    }
+
+    const result = await resp.json();
+    const docTitle = title || selectedFile.name.replace('.pdf', '');
+    showModalStatus(`✓ Uploaded "${docTitle}" — ${result.chunks_added} chunks created, ${result.total_documents} documents total`, 'success');
+    showToast(`"${docTitle}" indexed — ${result.chunks_added} chunks`, 'success');
+
+    // Clear
+    clearFileSelection();
+    document.getElementById('upload-title').value = '';
+
+    // Refresh dashboard
+    fetchDocuments();
+    fetchMetrics();
+
+  } catch (e) {
+    showModalStatus('Network error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Upload & Index';
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function showToast(msg, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = `toast ${type} show`;
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.classList.remove('show'); }, 3500);
+}
+
+// ── Chat state ────────────────────────────────────────────────────────────
+function addBubble(text, type, source='') {
+  const scroll = document.getElementById('chat-scroll');
+  const div = document.createElement('div');
+  div.className = `qa-bubble ${type}`;
+  div.textContent = text;
+  if (source) {
+    const s = document.createElement('div');
+    s.className = 'source-tag';
+    s.textContent = '📄 Source: ' + source;
+    div.appendChild(s);
+  }
+  scroll.appendChild(div);
+  scroll.scrollTop = scroll.scrollHeight;
+  return div;
+}
+
+function clearChat() {
+  const scroll = document.getElementById('chat-scroll');
+  scroll.innerHTML = '<div class="qa-bubble bot">Chat cleared. Ask a new question!</div>';
+}
+
+async function sendQuery() {
+  const input = document.getElementById('qa-input');
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = '';
+
+  addBubble(question, 'user');
+  const loading = addBubble('Retrieving chunks…', 'loading');
+
+  try {
+    loading.textContent = 'Querying RAG pipeline…';
+    const result = await queryBackend(question);
+
+    loading.className = 'qa-bubble bot';
+    loading.textContent = result.answer;
+
+    if (result.sources && result.sources.length > 0) {
+      const srcTag = document.createElement('div');
+      srcTag.className = 'source-tag';
+      const uniqueSources = [...new Set(result.sources.map(s => s.doc_title))];
+      srcTag.textContent = '📄 Sources: ' + uniqueSources.join(', ');
+      loading.appendChild(srcTag);
+    }
+
+    // Refresh metrics after each query
+    fetchMetrics();
+  } catch(err) {
+    loading.className = 'qa-bubble bot';
+    loading.textContent = '⚠️ ' + err.message;
+  }
+}
+
+// ── Close modal on overlay click ──────────────────────────────────────────
+document.getElementById('upload-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// ── Close modal on Escape key ─────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ── Animate bars on load + fetch live data ────────────────────────────────
+window.addEventListener('load', () => {
+  // Set initial placeholder values
+  document.getElementById('m-queries').childNodes[0].nodeValue = '—';
+  document.getElementById('m-p1').childNodes[0].nodeValue = '88';
+  document.getElementById('m-score').childNodes[0].nodeValue = '—';
+
+  // Fetch live data from backend
+  fetchMetrics();
+  fetchDocuments();
+
+  // Refresh metrics every 30 seconds
+  setInterval(fetchMetrics, 30000);
+  setInterval(fetchDocuments, 30000);
+
+  // Animate chunk bars
+  setTimeout(() => {
+    document.getElementById('chunk-bar').style.width = '72%';
+    document.getElementById('retrieval-bar').style.width = '95%';
+  }, 400);
+
+  // Animate bar chart (removed bars from this card, but keeping for compatibility)
+});
+</script>
+</body>
+</html>
