@@ -573,8 +573,8 @@
     <div class="metric-value" id="m-queries">—<span class="metric-unit"></span></div>
   </div>
   <div>
-    <div class="metric-label">Precision@1</div>
-    <div class="metric-value" id="m-p1">—<span class="metric-unit">%</span></div>
+    <div class="metric-label">Retrieval Mode</div>
+    <div class="metric-value" id="m-mode">—<span class="metric-unit"></span></div>
   </div>
   <div>
     <div class="metric-label">Avg Score</div>
@@ -590,22 +590,22 @@
     <div class="card stat-chunk" id="chunk-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;z-index:1;position:relative">
         <div>
-          <div class="num" id="chunk-pct">72%</div>
+          <div class="num" id="chunk-pct">—</div>
           <div class="lbl">Chunks Indexed</div>
         </div>
-        <div class="side">38/chunk</div>
+        <div class="side" id="chunk-side">—/doc</div>
       </div>
-      <div class="stat-bar" id="chunk-bar" style="width:72%"></div>
+      <div class="stat-bar" id="chunk-bar" style="width:0%"></div>
     </div>
     <div class="card stat-chunk lime-card" id="retrieval-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;z-index:1;position:relative">
         <div>
-          <div class="num" id="retrieval-pct">95%</div>
-          <div class="lbl">Retrieval Hit</div>
+          <div class="num" id="retrieval-pct">—</div>
+          <div class="lbl">Hit Rate (queries w/ sources)</div>
         </div>
-        <div class="side">19/query</div>
+        <div class="side" id="retrieval-side">— queries</div>
       </div>
-      <div class="stat-bar" id="retrieval-bar" style="width:95%"></div>
+      <div class="stat-bar" id="retrieval-bar" style="width:0%"></div>
     </div>
   </div>
 
@@ -614,14 +614,11 @@
     <div class="analytics-left">
       <div class="analytics-label">RAG Performance</div>
       <div class="analytics-big">
-        <div class="analytics-pct">88%</div>
+        <div class="analytics-pct" id="analytics-pct">—</div>
         <div>
-          <div style="font-size:1rem;font-weight:500">Precision@3</div>
+          <div style="font-size:1rem;font-weight:500" id="analytics-sub">RAG Performance</div>
           <div class="analytics-tag">
-            <span>+12.5%</span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-              <path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <span id="analytics-tag" style="font-size:.7rem">avg similarity score</span>
           </div>
         </div>
       </div>
@@ -632,11 +629,15 @@
         </div>
         <div class="pill">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 15l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          FAISS IndexFlatIP · cosine similarity
+          <span id="pill-vectordb">PostgreSQL + pgvector · HNSW</span>
         </div>
         <div class="pill">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 15l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          all-MiniLM-L6-v2 · 384-dim embeddings
+          <span id="pill-embedding">all-MiniLM-L6-v2 · 384-dim embeddings</span>
+        </div>
+        <div class="pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 15l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="pill-reranker">CrossEncoder reranker · threshold 0.35</span>
         </div>
       </div>
     </div>
@@ -651,8 +652,8 @@
           <circle cx="50" cy="50" r="26" fill="none" stroke="rgba(0,0,0,.15)" stroke-dasharray="2 3" stroke-width="8"/>
         </svg>
         <div class="donut-center">
-          <div class="pct">88%</div>
-          <div class="sub">Precision</div>
+          <div class="pct" id="donut-pct">—</div>
+          <div class="sub">Avg similarity</div>
         </div>
       </div>
     </div>
@@ -664,7 +665,7 @@
       <div class="cash-header">
         <span style="font-size:.85rem;color:var(--text-dim);font-weight:500">Indexed Documents</span>
         <div class="cash-amount-row">
-          <span class="cash-amount" id="doc-count-header">4</span>
+          <span class="cash-amount" id="doc-count-header">—</span>
           <span class="usd-badge">LIVE</span>
         </div>
       </div>
@@ -690,7 +691,7 @@
     <div style="margin-top:1rem;">
       <div class="query-big">Documents Loaded</div>
       <div style="display:flex;align-items:center;gap:.75rem;">
-        <div class="query-count" id="doc-count">4</div>
+        <div class="query-count" id="doc-count">—</div>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
           <path d="M9 12h6M9 16h6M9 8h6M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -710,9 +711,9 @@
   <!-- ⑤ Pipeline Steps card -->
   <div class="card pipeline-card">
     <div class="provider-row" style="padding:0 0 1rem;">
-      <span class="chip blue">OpenAI</span>
-      <span class="chip lime">Claude</span>
-      <span class="chip">Gemini</span>
+      <span class="chip" id="chip-openai">OpenAI</span>
+      <span class="chip" id="chip-anthropic">Claude</span>
+      <span class="chip" id="chip-gemini">Gemini</span>
     </div>
     <div class="pipe-header">
       <div class="pipe-title">Pipeline<br>Components</div>
@@ -720,22 +721,22 @@
     <div class="pipe-rows">
       <div>
         <div class="pipe-row">
-          <div class="pipe-amount" id="pipe-chunks">38<sup>chunks</sup></div>
-          <div class="pipe-label">FAISS Index</div>
+          <div class="pipe-amount" id="pipe-chunks">—<sup>chunks</sup></div>
+          <div class="pipe-label">Vector Store (pgvector HNSW)</div>
         </div>
         <div class="pipe-bar-track"><div class="pipe-bar-fill blue" id="pipe-chunks-bar" style="width:80%"></div></div>
       </div>
       <div>
         <div class="pipe-row">
-          <div class="pipe-amount">384<sup>dim</sup></div>
-          <div class="pipe-label">Embedding Size</div>
+          <div class="pipe-amount" id="pipe-emb">384<sup>dim</sup></div>
+          <div class="pipe-label">Embedding Model</div>
         </div>
         <div class="pipe-bar-track"><div class="pipe-bar-fill lime" style="width:65%"></div></div>
       </div>
       <div>
         <div class="pipe-row">
-          <div class="pipe-amount">0.87<sup>score</sup></div>
-          <div class="pipe-label">Top-1 Similarity</div>
+          <div class="pipe-amount" id="pipe-lat">—<sup>ms</sup></div>
+          <div class="pipe-label">Avg Query Latency</div>
         </div>
         <div class="pipe-bar-track"><div class="pipe-bar-fill white" style="width:87%"></div></div>
       </div>
@@ -743,25 +744,25 @@
 
     <!-- Mini precision rings -->
     <div class="ring-row" style="margin-top:1.5rem;">
-      <div class="mini-ring" data-tip="Precision@1">
+      <div class="mini-ring" data-tip="Documents">
         <svg viewBox="0 0 36 36">
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="4"/>
-          <circle cx="18" cy="18" r="14" fill="none" stroke="#ccff00" stroke-width="4"
-            stroke-dasharray="87.96" stroke-dashoffset="10"/>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#ccff00" stroke-width="4" id="ring-docs"
+            stroke-dasharray="87.96" stroke-dashoffset="87.96"/>
         </svg>
-        <div class="num">88%</div>
+        <div class="num" id="ring-docs-num">—</div>
       </div>
-      <div class="mini-ring" data-tip="Precision@3">
+      <div class="mini-ring" data-tip="Chunks">
         <svg viewBox="0 0 36 36">
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="4"/>
-          <circle cx="18" cy="18" r="14" fill="none" stroke="#3b82f6" stroke-width="4"
-            stroke-dasharray="87.96" stroke-dashoffset="0"/>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#3b82f6" stroke-width="4" id="ring-chunks"
+            stroke-dasharray="87.96" stroke-dashoffset="87.96"/>
         </svg>
-        <div class="num">100%</div>
+        <div class="num" id="ring-chunks-num">—</div>
       </div>
       <div style="font-size:.7rem;color:var(--text-dim);line-height:1.5;">
-        Precision@1 · Precision@3<br>
-        <span style="color:var(--white);font-weight:500">8/8 test queries</span>
+        Indexed documents · Indexed chunks<br>
+        <span style="color:var(--white);font-weight:500" id="llm-chip">LLM: —</span>
       </div>
     </div>
   </div>
@@ -882,18 +883,68 @@ async function fetchMetrics() {
     if (!resp.ok) return;
     const m = await resp.json();
 
+    // Intro row: total queries, retrieval mode, avg score
     document.getElementById('m-queries').childNodes[0].nodeValue = m.total_queries.toString();
-    document.getElementById('m-score').childNodes[0].nodeValue = m.avg_similarity_score.toFixed(2);
+    const modeEl = document.getElementById('m-mode');
+    const modeShort = (m.retrieval_mode || 'hybrid').split(' ')[0];
+    if (modeEl.childNodes.length) {
+      modeEl.childNodes[0].nodeValue = modeShort;
+    } else {
+      modeEl.textContent = modeShort;
+    }
+    document.getElementById('m-score').childNodes[0].nodeValue = (m.avg_similarity_score ?? 0).toFixed(2);
 
-    // Update pipeline card values
-    const chunkPct = Math.min(100, Math.round((m.chunks_indexed / 50) * 100));
-    document.getElementById('chunk-pct').textContent = chunkPct + '%';
-    document.getElementById('chunk-bar').style.width = chunkPct + '%';
+    // Analytics big number + donut: avg similarity as a 0-1 ring
+    const avgSim = Math.min(1, Math.max(0, m.avg_similarity_score || 0));
+    const simPct = Math.round(avgSim * 100);
+    document.getElementById('analytics-pct').textContent = simPct + '%';
+    document.getElementById('donut-pct').textContent = (m.avg_similarity_score ?? 0).toFixed(2);
+    const donutCircle = document.querySelector('.donut-wrap circle:nth-child(2)');
+    if (donutCircle) donutCircle.style.strokeDashoffset = (251.2 * (1 - avgSim)).toFixed(1);
 
-    // Update pipeline component chunks count
+    // Architecture pills (vector db, embedding model, reranker)
+    const vec = m.vector_db_type || 'PostgreSQL + pgvector (HNSW)';
+    document.getElementById('pill-vectordb').textContent =
+      vec.replace('PostgreSQL + pgvector (hnsw)', 'PostgreSQL + pgvector · HNSW')
+         .replace('PostgreSQL + pgvector (HNSW)', 'PostgreSQL + pgvector · HNSW');
+    const embModel = m.embedding_model || 'all-MiniLM-L6-v2';
+    const embDim = m.embedding_dim || 384;
+    document.getElementById('pill-embedding').textContent =
+      embModel.split('/').pop() + ' · ' + embDim + '-dim embeddings';
+    document.getElementById('pipe-emb').innerHTML = escapeHtml(embModel.split('/').pop()) + '<sup>' + embDim + '-dim</sup>';
+    const rer = m.reranker || 'none';
+    const thr = m.similarity_threshold != null ? ' · threshold ' + m.similarity_threshold : '';
+    document.getElementById('pill-reranker').textContent =
+      (rer === 'cross_encoder' ? 'CrossEncoder reranker' : 'No reranking (' + rer + ')') + thr;
+
+    // LLM provider chip on pipeline card
+    const llm = m.llm_provider || '';
+    const llmShort = llm.includes('/') ? llm.split('/')[1] : llm;
+    document.getElementById('llm-chip').textContent = 'LLM: ' + llmShort;
+    // Highlight the matching provider chip
+    ['chip-openai', 'chip-anthropic', 'chip-gemini'].forEach(id => {
+      const chip = document.getElementById(id);
+      chip.className = 'chip';
+      if (llm.toLowerCase().includes('openai') && id === 'chip-openai' ||
+          llm.toLowerCase().includes('anthropic') && id === 'chip-anthropic' ||
+          llm.toLowerCase().includes('gemini') && id === 'chip-gemini') {
+        chip.className = id === 'chip-anthropic' ? 'chip lime' : (id === 'chip-openai' ? 'chip blue' : 'chip');
+      }
+    });
+
+    // Pipeline Components card
     document.getElementById('pipe-chunks').innerHTML = m.chunks_indexed + '<sup>chunks</sup>';
-    const pipeBar = document.getElementById('pipe-chunks-bar');
-    if (pipeBar) pipeBar.style.width = Math.min(100, Math.round((m.chunks_indexed / 50) * 100)) + '%';
+    document.getElementById('pipe-lat').innerHTML = (m.avg_latency_ms ?? 0).toFixed(0) + '<sup>ms avg</sup>';
+
+    // Retrieval-stats column (percent of a 10k-chunk reference band, capped at 100)
+    const chunkPct = Math.min(100, Math.round((m.chunks_indexed / 10000) * 100));
+    document.getElementById('chunk-pct').textContent = m.chunks_indexed.toLocaleString();
+    document.getElementById('chunk-bar').style.width = Math.max(6, chunkPct) + '%';
+    const nDocs = Math.max(1, m.documents_indexed || 1);
+    document.getElementById('chunk-side').textContent = (m.chunks_indexed / nDocs).toFixed(1) + ' chunks/doc';
+    document.getElementById('retrieval-pct').textContent = simPct + '%';
+    document.getElementById('retrieval-bar').style.width = Math.max(6, simPct) + '%';
+    document.getElementById('retrieval-side').textContent = m.total_queries + ' queries · ' + m.documents_indexed + ' docs';
   } catch (e) {
     // Backend not reachable — silently skip
   }
@@ -906,6 +957,15 @@ async function fetchDocuments() {
     const docs = await resp.json();
     document.getElementById('doc-count').textContent = docs.length;
     document.getElementById('doc-count-header').textContent = docs.length;
+    // Mini rings: docs / chunks (scale rings to a 150-doc / 10k-chunk band)
+    const nDocs = docs.length;
+    const nChunks = docs.reduce((s, d) => s + (d.chunk_count || 0), 0);
+    const ringDocs = document.getElementById('ring-docs');
+    const ringChunks = document.getElementById('ring-chunks');
+    if (ringDocs) ringDocs.style.strokeDashoffset = (87.96 * (1 - Math.min(1, nDocs / 150))).toFixed(2);
+    if (ringChunks) ringChunks.style.strokeDashoffset = (87.96 * (1 - Math.min(1, nChunks / 10000))).toFixed(2);
+    document.getElementById('ring-docs-num').textContent = nDocs;
+    document.getElementById('ring-chunks-num').textContent = nChunks.toLocaleString();
     renderDocList(docs);
   } catch (e) {
     // Backend not reachable — silently skip
@@ -920,6 +980,9 @@ const DOC_TYPE_ICONS = {
   'Radiology Report': '🩻',
   'Clinical Notes': '📋',
   'Pathology Report': '🔬',
+  'Note': '📝',
+  'MedQuAD': '📚',
+  'Ref': '🩸',
   'Uploaded PDF': '📄',
   'Other': '📄',
   'General': '📄'
@@ -933,10 +996,10 @@ function renderDocList(docs) {
   }
   container.innerHTML = docs.map(doc => `
     <div class="doc-item" id="doc-item-${doc.id}">
-      <div class="doc-item-icon">${DOC_TYPE_ICONS[doc.type] || '📄'}</div>
+      <div class="doc-item-icon">${(DOC_TYPE_ICONS[(doc.doc_type || doc.type || '').trim()] || '📄')}</div>
       <div class="doc-item-info">
         <div class="doc-item-title">${escapeHtml(doc.title)}</div>
-        <div class="doc-item-meta">${escapeHtml(doc.type)} · ${doc.chunk_count} chunks</div>
+        <div class="doc-item-meta">${escapeHtml(doc.doc_type || doc.type)} · ${doc.chunk_count} chunks</div>
       </div>
       <button class="doc-item-delete" onclick="deleteDocument('${doc.id}')" title="Remove document">🗑</button>
     </div>
@@ -954,7 +1017,7 @@ async function deleteDocument(docId) {
   const item = document.getElementById(`doc-item-${docId}`);
   const title = item?.querySelector('.doc-item-title')?.textContent || docId;
 
-  if (!confirm(`Remove "${title}" from the knowledge base?\n\nThis will delete all its chunks and rebuild the FAISS index.`)) return;
+  if (!confirm(`Remove "${title}" from the knowledge base?\n\nThis will delete all its chunks from PostgreSQL + pgvector.`)) return;
 
   try {
     const resp = await fetch(`${API_BASE_URL}/documents/${docId}`, { method: 'DELETE' });
@@ -1189,7 +1252,22 @@ async function sendQuery() {
       const srcTag = document.createElement('div');
       srcTag.className = 'source-tag';
       const uniqueSources = [...new Set(result.sources.map(s => s.doc_title))];
-      srcTag.textContent = '📄 Sources: ' + uniqueSources.join(', ');
+      const top = result.sources[0];
+      srcTag.textContent = '📄 Sources: ' + uniqueSources.join(', ') +
+        ' · top match similarity ' + (top.similarity ?? 0).toFixed(3);
+      loading.appendChild(srcTag);
+      // Expandable per-source detail list
+      const detail = document.createElement('div');
+      detail.style.cssText = 'font-size:.62rem;color:var(--text-dim);margin-top:.35rem;max-height:90px;overflow-y:auto;line-height:1.5;';
+      detail.innerHTML = result.sources.map(s =>
+        '#' + s.rank + ' <b>' + escapeHtml(s.doc_title) + '</b> · sim ' + (s.similarity ?? 0).toFixed(3) +
+        (s.page_number ? ' · p.' + s.page_number : '')
+      ).join('<br>');
+      loading.appendChild(detail);
+    } else if (result.answer) {
+      const srcTag = document.createElement('div');
+      srcTag.className = 'source-tag';
+      srcTag.textContent = '⚠️ No sources above the similarity threshold — answer withheld.';
       loading.appendChild(srcTag);
     }
 
@@ -1215,7 +1293,6 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('load', () => {
   // Set initial placeholder values
   document.getElementById('m-queries').childNodes[0].nodeValue = '—';
-  document.getElementById('m-p1').childNodes[0].nodeValue = '88';
   document.getElementById('m-score').childNodes[0].nodeValue = '—';
 
   // Fetch live data from backend
@@ -1225,12 +1302,6 @@ window.addEventListener('load', () => {
   // Refresh metrics every 30 seconds
   setInterval(fetchMetrics, 30000);
   setInterval(fetchDocuments, 30000);
-
-  // Animate chunk bars
-  setTimeout(() => {
-    document.getElementById('chunk-bar').style.width = '72%';
-    document.getElementById('retrieval-bar').style.width = '95%';
-  }, 400);
 
   // Animate bar chart (removed bars from this card, but keeping for compatibility)
 });
