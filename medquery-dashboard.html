@@ -851,7 +851,13 @@
 
 <script>
 // ── API Configuration ─────────────────────────────────────────────────────
-const API_BASE_URL = "http://localhost:8000";
+// API base URL. When the dashboard is opened as a local file (file://), it falls
+// back to http://localhost:8000 (the documented local workflow). When served from
+// a web server on the same origin as the backend (e.g. FastAPI FileResponse or
+// any static host next to the API), requests go to the same origin automatically.
+// A remote backend can also be forced via ?api_base=http://host:port
+const _apiBaseParam = new URL(location.href).searchParams.get("api_base");
+const API_BASE_URL = _apiBaseParam || (window.location.protocol === "file:" ? "http://localhost:8000" : "");
 
 // ── State ─────────────────────────────────────────────────────────────────
 let selectedFile = null;

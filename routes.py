@@ -52,11 +52,14 @@ def ingest_text(req: IngestTextRequest):
     if not req.title.strip():
         raise HTTPException(status_code=400, detail="Document title is required")
 
-    result = rag_pipeline.ingest_document(
-        doc_type=req.doc_type.strip() or "General",
-        title=req.title.strip(),
-        content=req.content
-    )
+    try:
+        result = rag_pipeline.ingest_document(
+            doc_type=req.doc_type.strip() or "General",
+            title=req.title.strip(),
+            content=req.content
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return IngestResponse(**result)
 
 
@@ -97,11 +100,14 @@ async def upload_pdf(
     # Use filename as title if not provided
     doc_title = title.strip() or file.filename.rsplit(".", 1)[0]
 
-    result = rag_pipeline.ingest_document(
-        doc_type=doc_type.strip() or "Uploaded PDF",
-        title=doc_title,
-        content=extracted_text
-    )
+    try:
+        result = rag_pipeline.ingest_document(
+            doc_type=doc_type.strip() or "Uploaded PDF",
+            title=doc_title,
+            content=extracted_text
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return IngestResponse(**result)
 
 

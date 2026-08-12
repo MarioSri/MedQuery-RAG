@@ -358,7 +358,7 @@ def ingest_document(doc_type: str, title: str, content: str) -> Dict:
         # Chunk
         text_chunks = chunk_text(content)
         if not text_chunks:
-            return {"doc_id": doc_id, "chunks_added": 0, "total_chunks": len(chunks), "total_documents": len(documents)}
+            raise ValueError("Document is too short to be indexed.")
 
         new_chunks = []
         for i, tc in enumerate(text_chunks):
