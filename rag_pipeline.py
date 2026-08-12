@@ -1,556 +1,408 @@
-"""
-MedQuery RAG Pipeline — extracted directly from the Jupyter notebook.
-Same documents, same chunking, same embeddings, same FAISS, same retrieval, same LLM call.
-Only addition: lightweight state tracking for metrics.
+"""MedQuery-RAG core pipeline — persistent, provider-agnostic version.
 
-Extended with live document ingestion / deletion without server restart.
-"""
+Architecture per the verified roadmap:
 
+  FastAPI backend
+       |
+  RAG engine ── llm_providers.py (LLMProvider: Anthropic/OpenAI/Gemini/Ollama/Custom)
+       |        embedding_providers.py (EmbeddingProvider: ST/OpenAI/HF/Custom)
+  pgvector DB ── db_store.py (documents / chunks / queries / conversations)
+       |
+  retrieval: hybrid (vector + keyword, RRF) -> reranker -> threshold -> LLM
+
+Knowledge storage != conversation memory (conversations kept in their own
+table, used only for optional query rewriting).
+"""
+import re
 import time
 import uuid
-import threading
+from typing import Dict, List
+
 import numpy as np
-from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional
 
-import faiss
-from sentence_transformers import SentenceTransformer
-import anthropic
+import config
+import db_store
+from embedding_providers import get_embedding_provider
+from llm_providers import get_llm_provider
+from reranker import get_reranker
 
-from config import ANTHROPIC_API_KEY
+# Module-level singletons (initialized once at startup)
+embedding_model = None
+llm = None
+reranker = None
 
+# Medically grounded system prompt
+SYSTEM_PROMPT = (
+    "You are MedQuery, a medical RAG assistant. Answer the question ONLY using "
+    "the retrieved medical documents below. Cite the source title and page/chunk "
+    "where each claim comes from, as inline markers like [1], [2]. If the retrieved "
+    "information is insufficient to answer, say so plainly. Do not invent clinical "
+    "facts. End with a reminder to consult a healthcare professional for personal "
+    "medical decisions."
+)
 
-# ── Medical document knowledge base (identical to notebook Section 3) ──────────
-
-MEDICAL_DOCUMENTS = [
-    {
-        "id": "doc_001",
-        "type": "Lab Report",
-        "title": "Complete Blood Count — Patient Ravi Kumar",
-        "content": """
-COMPLETE BLOOD COUNT (CBC) REPORT
-Patient: Ravi Kumar | DOB: 14-Mar-1985 | MRN: RK-20241
-Collected: 10-Jan-2025 | Lab: Apollo Diagnostics, Hyderabad
-
-RESULTS SUMMARY:
-Haemoglobin: 11.2 g/dL [Reference: 13.0–17.0] — LOW
-RBC Count: 3.9 million/mcL [Reference: 4.5–5.5] — LOW
-WBC Count: 9,800 /mcL [Reference: 4,500–11,000] — NORMAL
-Platelet Count: 210,000 /mcL [Reference: 150,000–400,000] — NORMAL
-MCV: 68 fL [Reference: 80–100] — LOW (microcytic)
-MCH: 22 pg [Reference: 27–33] — LOW
-Haematocrit: 34% [Reference: 40–52%] — LOW
-Neutrophils: 62% | Lymphocytes: 30% | Monocytes: 6% | Eosinophils: 2%
-
-INTERPRETATION:
-Findings are consistent with microcytic hypochromic anaemia, most likely due to iron deficiency.
-Low MCV and MCH with reduced haemoglobin suggest inadequate iron stores.
-
-RECOMMENDATIONS:
-1. Serum ferritin and serum iron levels to confirm iron deficiency.
-2. Dietary counselling — increase iron-rich foods (red meat, spinach, lentils).
-3. Consider oral iron supplementation (Ferrous Sulphate 200 mg BD) if ferritin confirmed low.
-4. Repeat CBC in 8 weeks after starting treatment.
-5. Rule out chronic blood loss (stool occult blood test recommended).
-
-Reported by: Dr. Priya Mehta, MD Pathology | Signature verified digitally
-"""
-    },
-    {
-        "id": "doc_002",
-        "type": "Prescription",
-        "title": "Prescription — Hypertension Management",
-        "content": """
-PRESCRIPTION
-Dr. Arun Sharma, MD (Internal Medicine) | Reg No: MCI-78432
-Care Hospital, Jubilee Hills, Hyderabad | Tel: 040-2222-3333
-Date: 05-Jan-2025
-
-Patient: Sunita Reddy | Age: 58 years | Weight: 72 kg
-Diagnosis: Essential Hypertension (Stage 2), Dyslipidaemia
-
-Rx:
-1. Tab. Amlodipine 5 mg — Once daily (morning) — 30 days
-   [Calcium channel blocker — for blood pressure control]
-
-2. Tab. Telmisartan 40 mg — Once daily (morning) — 30 days
-   [ARB — for blood pressure and kidney protection]
-
-3. Tab. Atorvastatin 20 mg — Once daily (night) — 30 days
-   [Statin — to reduce LDL cholesterol]
-
-4. Tab. Aspirin 75 mg — Once daily (after breakfast) — 30 days
-   [Antiplatelet — cardiovascular risk reduction]
-
-WARNINGS & INSTRUCTIONS:
-- Do NOT stop medications without consulting the doctor, even if BP feels normal.
-- Monitor BP at home twice daily and maintain a log.
-- Avoid NSAIDs (ibuprofen, diclofenac) — can raise BP and interact with Telmisartan.
-- Atorvastatin: Report any unexplained muscle pain or weakness immediately.
-- Salt restriction: limit sodium intake to less than 2g/day.
-- Alcohol: limit to minimal or avoid completely.
-- Regular aerobic exercise: 30 minutes, 5 days a week.
-
-Follow-up: 4 weeks | Fasting lipid profile + kidney function test before next visit.
-"""
-    },
-    {
-        "id": "doc_003",
-        "type": "Discharge Summary",
-        "title": "Discharge Summary — Acute Appendicitis",
-        "content": """
-DISCHARGE SUMMARY
-Yashoda Hospitals, Secunderabad
-IP No: YH-2025-00891 | Ward: Surgical Ward B
-
-Patient: Mohammed Farhan | Age: 27 | Gender: Male
-Admission: 08-Jan-2025 | Discharge: 11-Jan-2025 | Stay: 3 days
-
-PRESENTING COMPLAINT:
-Sudden onset right iliac fossa pain for 18 hours, nausea, low-grade fever (38.1°C).
-
-DIAGNOSIS: Acute Appendicitis (confirmed intraoperatively)
-
-INVESTIGATIONS:
-- WBC: 14,200/mcL (elevated — suggestive of infection)
-- CRP: 42 mg/L (elevated)
-- USG Abdomen: Dilated, non-compressible appendix (8mm diameter), periappendiceal fat stranding
-- CT Abdomen (plain): Confirmed acute appendicitis, no perforation
-
-PROCEDURE:
-Laparoscopic Appendicectomy performed on 08-Jan-2025 at 21:30 hrs.
-Surgeon: Dr. Raghavendra Rao, MS (General Surgery).
-Anaesthesia: General anaesthesia, uneventful.
-Operative findings: Inflamed appendix, no perforation, no peritoneal soiling.
-Histopathology sent — awaited.
-
-HOSPITAL COURSE:
-Post-operative recovery was smooth. Oral feeds started on Day 1 post-op.
-IV antibiotics (Ceftriaxone + Metronidazole) given for 48 hours, switched to oral.
-Ambulated on Day 1. No post-op complications.
-
-DISCHARGE MEDICATIONS:
-1. Tab. Amoxicillin-Clavulanate 625 mg — twice daily × 5 days
-2. Tab. Metronidazole 400 mg — three times daily × 5 days
-3. Tab. Paracetamol 500 mg — as needed for pain (max 4 times/day)
-4. Tab. Pantoprazole 40 mg — once daily (morning, empty stomach) × 7 days
-
-DISCHARGE INSTRUCTIONS:
-- Keep wound clean and dry. Dress every 2 days.
-- No heavy lifting or strenuous activity for 4 weeks.
-- Soft diet for 1 week; gradually resume normal diet.
-- Watch for: fever >38°C, wound redness/discharge, increasing pain → visit ER immediately.
-- Histopathology report collection: after 7 days from Apollo Diagnostics.
-
-Follow-up: 14-Jan-2025 with Dr. Raghavendra Rao (OPD)
-"""
-    },
-    {
-        "id": "doc_004",
-        "type": "Radiology Report",
-        "title": "MRI Brain Report — Headache Workup",
-        "content": """
-MRI BRAIN REPORT
-Imaging Centre: KIMS Radiology, Hyderabad
-Study Date: 12-Jan-2025 | Report Date: 12-Jan-2025
-Ref. Physician: Dr. Sneha Kulkarni, DM Neurology
-
-Patient: Lakshmi Narayana | Age: 45 | Gender: Female | MRN: KH-45901
-Clinical History: Recurrent severe headaches for 3 months, worse in mornings, associated with visual disturbances.
-
-TECHNIQUE:
-MRI brain performed on 3 Tesla scanner.
-Sequences: T1, T2, FLAIR, DWI, T1 post-gadolinium contrast.
-
-FINDINGS:
-
-Cerebral Parenchyma:
-- No acute infarct or restricted diffusion on DWI.
-- No intracranial haemorrhage.
-- White matter: Few scattered T2/FLAIR hyperintensities in bilateral periventricular regions — non-specific, may represent early small vessel disease.
-- Grey-white matter differentiation: Preserved.
-
-Ventricles & CSF Spaces:
-- Lateral ventricles mildly prominent bilaterally.
-- Third and fourth ventricles: Normal.
-- No midline shift.
-
-Posterior Fossa:
-- Cerebellum and brainstem: No focal lesion.
-- No Chiari malformation.
-
-Post-contrast:
-- No abnormal parenchymal or meningeal enhancement.
-- No space-occupying lesion identified.
-
-Vessels (MRA not performed — clinically not requested):
-- Major intracranial flow voids appear grossly preserved.
-
-Orbits & Sinuses:
-- Bilateral maxillary sinuses show mucosal thickening — suggestive of chronic sinusitis.
-- Ethmoid sinuses partially opacified.
-
-IMPRESSION:
-1. No acute intracranial pathology.
-2. Non-specific periventricular white matter changes — clinical correlation advised; may represent early cerebrovascular disease.
-3. Chronic bilateral maxillary and ethmoid sinusitis — could be contributing to headache symptoms.
-4. Clinical and further ENT evaluation recommended for sinus-related headache management.
-
-Reported by: Dr. Kiran Bhat, MD Radiology, DNB | KIMS Imaging Centre
-"""
-    }
-]
-
-
-# ── Text Chunking (identical to notebook Section 4) ───────────────────────────
-
-@dataclass
-class Chunk:
-    chunk_id: str
-    doc_id: str
-    doc_type: str
-    doc_title: str
-    content: str
-    chunk_index: int
-
-
-def chunk_text(text: str, chunk_size: int = 600, overlap: int = 120) -> List[str]:
-    """Split text into overlapping chunks, preferring sentence boundaries."""
-    text = ' '.join(text.split())
-    if not text:
-        return []
-
-    chunks = []
-    start = 0
-    text_len = len(text)
-
-    while start < text_len:
-        end = min(start + chunk_size, text_len)
-
-        if end < text_len:
-            for punct in ['.', '!', '?', '\n']:
-                boundary = text.rfind(punct, start + int(chunk_size * 0.5), end)
-                if boundary != -1 and boundary + 1 > start:
-                    end = boundary + 1
-                    break
-
-        chunk = text[start:end].strip()
-        if len(chunk) > 40:
-            chunks.append(chunk)
-
-        next_start = end - overlap
-        if next_start <= start:
-            next_start = end
-        start = next_start
-
-    return chunks
-
-
-def build_chunks(documents: List[Dict]) -> List[Chunk]:
-    all_chunks = []
-    for doc in documents:
-        text_chunks = chunk_text(doc['content'])
-        for i, chunk_text_content in enumerate(text_chunks):
-            all_chunks.append(Chunk(
-                chunk_id=f"{doc['id']}_chunk_{i:03d}",
-                doc_id=doc['id'],
-                doc_type=doc['type'],
-                doc_title=doc['title'],
-                content=chunk_text_content,
-                chunk_index=i
-            ))
-    return all_chunks
-
-
-# ── RAG Pipeline state + functions ────────────────────────────────────────────
-
-# Thread lock for safe concurrent ingestion / deletion
-_lock = threading.Lock()
-
-# Module-level state
-documents: List[Dict] = []          # Live registry of all indexed documents
-chunks: List[Chunk] = []
-chunk_embeddings: List[np.ndarray] = []   # Per-chunk embeddings (kept in sync with chunks)
-index: Optional[faiss.IndexFlatIP] = None
-embedding_model: Optional[SentenceTransformer] = None
-client: Optional[anthropic.Anthropic] = None
-
-# Metrics tracking
-total_queries = 0
-cumulative_latency_ms = 0.0
-cumulative_similarity = 0.0
-total_similarity_count = 0
-
-
-SYSTEM_PROMPT = """You are MedQuery AI, an expert medical document assistant.
-
-Your rules:
-- Answer ONLY based on the provided document context.
-- If the context does not contain the answer, say: "The document doesn't contain this information."
-- Use clear, simple language suitable for patients and caregivers.
-- Mention medications, values, or recommendations precisely as stated.
-- Always remind the user to consult a healthcare professional for personal medical decisions.
-- Use bullet points and bold text for readability when appropriate."""
+INSUFFICIENT_EVIDENCE = (
+    "No sufficiently relevant information was found in the knowledge base to "
+    "answer this question confidently. Please rephrase, add supporting documents, "
+    "or consult a healthcare professional."
+)
 
 
 def initialize():
-    """Load model, build chunks, create FAISS index. Called once at startup."""
-    global chunks, chunk_embeddings, index, embedding_model, client, documents
-
-    print("[INFO] Loading SentenceTransformer model...")
-    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-    dim_size = getattr(embedding_model, 'get_embedding_dimension', getattr(embedding_model, 'get_sentence_embedding_dimension', None))()
-    print(f"[OK] Model loaded -- embedding dimension: {dim_size}")
-
-    # Initialize documents registry from the hard-coded notebook data
-    documents = [
-        {"id": doc["id"], "type": doc["type"], "title": doc["title"], "content": doc["content"]}
-        for doc in MEDICAL_DOCUMENTS
-    ]
-
-    # Build chunks
-    chunks = build_chunks(MEDICAL_DOCUMENTS)
-    print(f"[OK] Chunking complete -- {len(chunks)} chunks")
-
-    # Generate embeddings
-    chunk_texts = [c.content for c in chunks]
-    emb_matrix = embedding_model.encode(
-        chunk_texts,
-        batch_size=32,
-        show_progress_bar=False,
-        normalize_embeddings=True
-    )
-    emb_matrix = np.array(emb_matrix, dtype='float32')
-
-    # Store per-chunk embeddings for efficient delete/rebuild
-    chunk_embeddings = [emb_matrix[i] for i in range(emb_matrix.shape[0])]
-    print(f"[OK] Embeddings generated -- shape: {emb_matrix.shape}")
-
-    # Build FAISS index
-    dim = emb_matrix.shape[1]
-    index = faiss.IndexFlatIP(dim)
-    index.add(emb_matrix)
-    print(f"[OK] FAISS index built -- {index.ntotal} vectors, {dim} dims")
-
-    # Anthropic client
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    print("[OK] Anthropic client ready")
+    global embedding_model, llm, reranker
+    print("[INFO] Connecting to PostgreSQL + pgvector...")
+    db_store.ensure_schema()
+    print("[INFO] Loading embedding model...")
+    embedding_model = get_embedding_provider()
+    print(f"[OK] Embeddings ready -- {embedding_model.model_id} ({embedding_model.dimension} dims)")
+    print("[INFO] Initializing LLM provider...")
+    llm = get_llm_provider()
+    print(f"[OK] LLM ready -- {llm.model_id}")
+    print("[INFO] Initializing reranker...")
+    reranker = get_reranker()
+    print(f"[OK] Reranker ready -- {type(reranker).__name__}")
 
 
-# ── Live document ingestion ───────────────────────────────────────────────────
+# ── Chunking ──────────────────────────────────────────────────────────────────
 
-def ingest_document(doc_type: str, title: str, content: str) -> Dict:
+def _guard_min_length(content: str):
+    """P1 contract: documents below a minimum length can never be indexed."""
+    if len(content.strip()) < 41:
+        raise ValueError("Document is too short to be indexed.")
+
+
+def chunk_text(text: str, chunk_size: int = 600, overlap: int = 120) -> List[str]:
+    """Sentence-boundary chunking (unchanged algorithm from the original repo)."""
+    if not text or not text.strip():
+        return []
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    sentences = [s for s in sentences if s.strip()]
+    if not sentences:
+        return []
+
+    chunks = []
+    current_chunk = ""
+    last_boundary_end = 0
+
+    def add_chunk(text_):
+        text_ = text_.strip()
+        if text_:
+            chunks.append(text_)
+
+    for sentence in sentences:
+        if len(current_chunk) + len(sentence) + 1 <= chunk_size:
+            current_chunk = (current_chunk + " " + sentence).strip()
+        else:
+            if len(current_chunk) > 0:
+                if len(current_chunk) >= min(40, chunk_size):
+                    add_chunk(current_chunk)
+                    tail = current_chunk[-overlap:] if len(current_chunk) > overlap else current_chunk
+                    boundary_pos = re.search(r'(?<=[.!?])\s', tail)
+                    if boundary_pos:
+                        current_chunk = tail[boundary_pos.end():] + " " + sentence
+                    else:
+                        current_chunk = tail + " " + sentence
+                    last_boundary_end = len(current_chunk)
+                    continue
+                else:
+                    next_start = last_boundary_end + len(current_chunk)
+            current_chunk = sentence
+            last_boundary_end = len(current_chunk)
+
+    if current_chunk:
+        add_chunk(current_chunk)
+    return chunks
+
+
+# ── Ingestion ─────────────────────────────────────────────────────────────────
+
+def ingest_document(doc_type: str, title: str, content: str,
+                    source: str = "manual", chunks_with_pages=None) -> Dict:
+    """Ingest a document into PostgreSQL + pgvector.
+
+    chunks_with_pages: optional list of (content, page_number) from structured
+    PDF extraction; falls back to chunk_text(content) when None.
+    Raises ValueError if the content produces zero chunks (no silent drops).
     """
-    Ingest a new document at runtime:
-      1. Auto-generate doc_id
-      2. Chunk the text
-      3. Embed the chunks
-      4. Append to FAISS index
-      5. Register in documents list
+    global embedding_model
+    if embedding_model is None:
+        raise RuntimeError("Pipeline not initialized")
 
-    Returns a summary dict.
-    """
-    global chunks, chunk_embeddings, index, documents
-
+    _guard_min_length(content)
     doc_id = f"doc_{uuid.uuid4().hex[:8]}"
 
-    with _lock:
-        # Chunk
+    if chunks_with_pages:
+        text_chunks = [c for c, _ in chunks_with_pages]
+    else:
         text_chunks = chunk_text(content)
-        if not text_chunks:
-            raise ValueError("Document is too short to be indexed.")
 
-        new_chunks = []
-        for i, tc in enumerate(text_chunks):
-            new_chunks.append(Chunk(
-                chunk_id=f"{doc_id}_chunk_{i:03d}",
-                doc_id=doc_id,
-                doc_type=doc_type,
-                doc_title=title,
-                content=tc,
-                chunk_index=i
-            ))
+    if not text_chunks:
+        raise ValueError("Document is too short to be indexed.")
 
-        # Embed
-        new_texts = [c.content for c in new_chunks]
-        new_emb = embedding_model.encode(
-            new_texts,
-            batch_size=32,
-            show_progress_bar=False,
-            normalize_embeddings=True
+    # Embed all chunks
+    new_emb = embedding_model.encode(text_chunks)
+
+    items = []
+    for i, tc in enumerate(text_chunks):
+        page = chunks_with_pages[i][1] if chunks_with_pages else None
+        items.append({
+            "chunk_id": f"{doc_id}_chunk_{i:03d}",
+            "content": tc,
+            "chunk_index": i,
+            "page_number": page,
+            "metadata": {"doc_type": doc_type, "doc_title": title},
+            "embedding": new_emb[i],
+        })
+
+    with db_store._lock:
+        conn = db_store.get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO documents (id, title, doc_type, source) VALUES (%s, %s, %s, %s) "
+            "ON CONFLICT (id) DO NOTHING",
+            (doc_id, title, doc_type, source),
         )
-        new_emb = np.array(new_emb, dtype='float32')
+        conn.commit()
+        cur.close()
+        db_store.store_chunks(doc_id, items)
 
-        # Append to FAISS
-        index.add(new_emb)
-
-        # Update module state
-        chunks.extend(new_chunks)
-        for i in range(new_emb.shape[0]):
-            chunk_embeddings.append(new_emb[i])
-
-        documents.append({"id": doc_id, "type": doc_type, "title": title, "content": content})
-
-        print(f"[INGEST] Added '{title}' ({doc_id}) — {len(new_chunks)} chunks, index now {index.ntotal} vectors")
-
-        return {
-            "doc_id": doc_id,
-            "chunks_added": len(new_chunks),
-            "total_chunks": len(chunks),
-            "total_documents": len(documents)
-        }
+    print(f"[INGEST] Added '{title}' ({doc_id}) — {len(items)} chunks")
+    return {
+        "doc_id": doc_id,
+        "chunks_added": len(items),
+        "total_chunks": db_store.chunk_stats(),
+        "total_documents": len(db_store.list_documents()),
+    }
 
 
 def delete_document(doc_id: str) -> Dict:
-    """
-    Remove a document and rebuild the FAISS index.
-
-    Reuses existing embeddings for remaining chunks — no re-encoding.
-    Only the FAISS index is rebuilt from scratch.
-    """
-    global chunks, chunk_embeddings, index, documents
-
-    with _lock:
-        # Check document exists
-        if not any(d["id"] == doc_id for d in documents):
-            return {"success": False, "message": f"Document '{doc_id}' not found"}
-
-        # Identify which chunk indices belong to this document
-        keep_indices = [i for i, c in enumerate(chunks) if c.doc_id != doc_id]
-
-        if len(keep_indices) == len(chunks):
-            return {"success": False, "message": f"Document '{doc_id}' not found in chunks"}
-
-        removed_count = len(chunks) - len(keep_indices)
-
-        # Rebuild chunks and embeddings lists (reusing existing embeddings)
-        chunks = [chunks[i] for i in keep_indices]
-        chunk_embeddings = [chunk_embeddings[i] for i in keep_indices]
-
-        # Rebuild FAISS index from remaining embeddings
-        dim = index.d
-        index = faiss.IndexFlatIP(dim)
-        if chunk_embeddings:
-            emb_matrix = np.stack(chunk_embeddings).astype('float32')
-            index.add(emb_matrix)
-
-        # Remove from documents registry
-        doc_title = next((d["title"] for d in documents if d["id"] == doc_id), doc_id)
-        documents = [d for d in documents if d["id"] != doc_id]
-
-        print(f"[DELETE] Removed '{doc_title}' ({doc_id}) — {removed_count} chunks removed, index now {index.ntotal} vectors")
-
-        return {"success": True, "message": f"Deleted '{doc_title}' — removed {removed_count} chunks"}
-
-
-# ── Retrieval + RAG answer (unchanged logic) ─────────────────────────────────
-
-def retrieve(query: str, top_k: int = 5) -> List[Tuple[Chunk, float]]:
-    """Embed a query and retrieve the top-K most relevant chunks."""
-    query_vec = embedding_model.encode([query], normalize_embeddings=True)
-    query_vec = np.array(query_vec, dtype='float32')
-
-    scores, indices = index.search(query_vec, top_k)
-
-    results = []
-    for score, idx in zip(scores[0], indices[0]):
-        if idx == -1:
-            continue
-        results.append((chunks[idx], float(score)))
-
-    return results
-
-
-def rag_answer(question: str, top_k: int = 5) -> Dict:
-    """
-    Full RAG pipeline: retrieve → build prompt → call Claude → return answer + sources.
-    """
-    global total_queries, cumulative_latency_ms, cumulative_similarity, total_similarity_count
-
-    start_time = time.time()
-
-    # Step 1: Retrieve
-    retrieved = retrieve(question, top_k=top_k)
-
-    if not retrieved:
-        return {
-            "answer": "No relevant documents found for this question.",
-            "sources": [],
-            "retrieved_chunks": [],
-            "similarity_scores": [],
-            "latency_ms": 0,
-            "tokens_used": 0
-        }
-
-    # Step 2: Build context
-    context_parts = []
-    for i, (chunk, score) in enumerate(retrieved):
-        context_parts.append(
-            f"[Excerpt {i+1} | Source: {chunk.doc_type} — {chunk.doc_title} | Relevance: {score:.0%}]\n"
-            f"{chunk.content}"
-        )
-    context = "\n\n---\n\n".join(context_parts)
-
-    user_message = (
-        f"Answer the following question using ONLY the provided medical document excerpts.\n\n"
-        f"Question: {question}\n\n"
-        f"Document Excerpts:\n{context}"
-    )
-
-    # Step 3: Call Claude
-    response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=512,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}]
-    )
-
-    answer = response.content[0].text
-    tokens_used = (response.usage.input_tokens or 0) + (response.usage.output_tokens or 0)
-    latency_ms = (time.time() - start_time) * 1000
-
-    # Update metrics
-    similarity_scores = [s for _, s in retrieved]
-    total_queries += 1
-    cumulative_latency_ms += latency_ms
-    cumulative_similarity += sum(similarity_scores)
-    total_similarity_count += len(similarity_scores)
-
-    return {
-        "answer": answer,
-        "sources": [
-            {"doc_type": c.doc_type, "doc_title": c.doc_title, "similarity_score": round(s, 4)}
-            for c, s in retrieved
-        ],
-        "retrieved_chunks": [c.content for c, _ in retrieved],
-        "similarity_scores": [round(s, 4) for _, s in retrieved],
-        "latency_ms": round(latency_ms, 1),
-        "tokens_used": tokens_used
-    }
-
-
-def get_metrics() -> Dict:
-    """Return live pipeline metrics — only what actually exists."""
-    avg_sim = (cumulative_similarity / total_similarity_count) if total_similarity_count > 0 else 0.0
-    avg_lat = (cumulative_latency_ms / total_queries) if total_queries > 0 else 0.0
-
-    return {
-        "total_queries": total_queries,
-        "documents_indexed": len(documents),
-        "chunks_indexed": len(chunks),
-        "avg_similarity_score": round(avg_sim, 4),
-        "avg_latency_ms": round(avg_lat, 1),
-        "embedding_model": "all-MiniLM-L6-v2",
-        "vector_db_type": "FAISS IndexFlatIP",
-        "embedding_dim": index.d if index is not None else 0
-    }
+    with db_store._lock:
+        removed, deleted = db_store.delete_document(doc_id)
+    return {"success": deleted, "chunks_removed": removed,
+            "total_documents": len(db_store.list_documents()),
+            "total_chunks": db_store.chunk_stats(),
+            "message": "Document deleted" if deleted else f"Document {doc_id} not found"}
 
 
 def get_documents() -> List[Dict]:
-    """Return list of indexed documents with chunk counts."""
-    doc_chunks = {}
-    for c in chunks:
-        if c.doc_id not in doc_chunks:
-            doc_chunks[c.doc_id] = {"id": c.doc_id, "type": c.doc_type, "title": c.doc_title, "chunk_count": 0}
-        doc_chunks[c.doc_id]["chunk_count"] += 1
-    return list(doc_chunks.values())
+    return db_store.list_documents()
+
+
+# ── Retrieval ─────────────────────────────────────────────────────────────────
+
+def _retrieve_candidates(query: str):
+    query_vec = embedding_model.encode([query])[0].tolist()
+    if config.RERANKER.lower() in ("none", "off", "false", ""):
+        results = db_store.hybrid_retrieve(
+            query_vec, query,
+            candidate_k=config.RETRIEVAL_TOP_K,
+            top_k=config.RETRIEVAL_TOP_K,
+        )
+        return [(cid, content, score) for cid, content, score in results]
+    # Reranking re-orders candidates; map each reranked chunk back to its
+    # semantic cosine score so all returned scores stay comparable.
+    candidates = db_store.hybrid_retrieve(
+        query_vec, query,
+        candidate_k=config.RETRIEVAL_CANDIDATE_K,
+        top_k=config.RETRIEVAL_CANDIDATE_K,
+    )
+    cosine_of = {cid: score for cid, _, score in candidates}
+    reranked = reranker.rerank(query, candidates)
+    return [(cid, content, round(cosine_of.get(cid, 0.0), 4))
+            for cid, content, _ in reranked]
+
+
+def retrieve(query: str, top_k: int = None):
+    top_k = top_k or config.RETRIEVAL_TOP_K
+    results = _retrieve_candidates(query)[:top_k]
+    if not results:
+        return [], []
+    # Scores are always semantic cosine similarity (0..1).
+    scores = [r[2] for r in results]
+    if config.THRESHOLD_ENABLED and max(scores) < config.SIMILARITY_THRESHOLD:
+        return [], scores
+    return results, scores
+
+
+# ── Query answering ───────────────────────────────────────────────────────────
+
+def rag_answer(question: str, top_k: int = None, conversation=None) -> Dict:
+    """Full RAG flow: retrieve -> threshold -> build context with citations -> LLM.
+
+    conversation: optional list of {"role", "content"} used only to rewrite the
+    query (conversation memory is stored separately from the knowledge base).
+    """
+    global llm
+    start = time.time()
+    top_k = top_k or config.RETRIEVAL_TOP_K
+
+    # Optional lightweight query rewriting using conversation context
+    effective_question = question
+    if conversation and llm is not None and _needs_rewrite(conversation, question):
+        try:
+            rewrite = llm.generate(
+                prompt=_rewrite_prompt(conversation, question),
+                system="Rewrite the user's latest question into a self-contained, "
+                       "retrieval-friendly question. Output only the rewritten question.",
+            )["text"].strip()
+            if rewrite:
+                effective_question = rewrite
+        except Exception as e:
+            print(f"[WARN] Query rewrite failed ({e}); using original question")
+
+    results, scores = retrieve(effective_question, top_k)
+    latency_ms = round((time.time() - start) * 1000, 2)
+    tokens_used = 0
+
+    if not results:
+        answer = INSUFFICIENT_EVIDENCE
+        sources, chunks_out = [], []
+    else:
+        # Build numbered context with page/chunk citation metadata
+        numbered = []
+        sources = []
+        chunks_out = []
+        for i, (cid, content, score) in enumerate(results, 1):
+            numbered.append(f"[{i}] {content}")
+            src = _source_for_chunk(cid)
+            src["rank"] = i
+            src["similarity"] = round(score, 4)
+            sources.append(src)
+            chunks_out.append(content)
+
+        context = "\n\n".join(numbered)
+        prompt = f"Retrieved medical documents:\n\n{context}\n\nQuestion: {question}\n\nAnswer:"
+        try:
+            resp = llm.generate(prompt, system=SYSTEM_PROMPT)
+            answer = resp["text"]
+            tokens_used = resp["usage"].get("input_tokens", 0) + resp["usage"].get("output_tokens", 0)
+        except Exception as e:
+            answer = f"(LLM unavailable: {type(e).__name__}) — retrieved {len(results)} relevant chunk(s): {context[:500]}"
+            tokens_used = 0
+
+    # Persist query log (separate from conversation memory)
+    try:
+        model_id = str(llm.model_id) if llm else "none"
+        _log_query(question, answer, model_id, latency_ms)
+    except Exception as e:
+        print(f"[WARN] Query logging failed: {e}")
+
+    return {
+        "answer": answer,
+        "sources": sources,
+        "retrieved_chunks": chunks_out,
+        "similarity_scores": [round(s, 4) for s in scores],
+        "latency_ms": latency_ms,
+        "tokens_used": tokens_used,
+    }
+
+
+def _source_for_chunk(chunk_id: str):
+    """Look up rich citation metadata for a chunk."""
+    conn = db_store.get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT c.document_id, c.chunk_index, c.page_number, c.metadata, "
+        "       d.title, d.doc_type, d.source "
+        "FROM chunks c JOIN documents d ON d.id = c.document_id WHERE c.id = %s",
+        (chunk_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    if not row:
+        return {"doc_id": chunk_id.rsplit("_chunk_", 1)[0]}
+    doc_id, idx, page, meta, title, dtype, source = row
+    return {
+        "doc_id": doc_id, "chunk_index": idx, "page_number": page,
+        "doc_title": title, "doc_type": dtype, "source": source,
+    }
+
+
+def _needs_rewrite(conversation, question: str) -> bool:
+    """Heuristic: ambiguous standalone questions after a substantive conversation."""
+    if len(conversation) < 2:
+        return False
+    vague = re.match(r"^(what|which|who|where|when|why|how|was|were|did|does|do|is|are)\b", question, re.I)
+    short = len(question.split()) <= 6
+    return bool(vague and short)
+
+
+def _rewrite_prompt(conversation, question: str) -> str:
+    history = "\n".join(
+        f"{m['role']}: {m['content']}" for m in conversation[-6:]
+    )
+    return f"Conversation history:\n{history}\n\nLatest question: {question}\n\nRewrite as a self-contained question:"
+
+
+def _log_query(question, answer, model, latency_ms):
+    conn = db_store.get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO queries (question, answer, model, latency_ms) VALUES (%s, %s, %s, %s)",
+        (question, answer[:4000], model, latency_ms),
+    )
+    conn.commit()
+    cur.close()
+
+
+def get_metrics() -> Dict:
+    conn = db_store.get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*), COALESCE(AVG(latency_ms), 0) FROM queries;")
+    total, avg_lat = cur.fetchone()
+    cur.execute("""
+        SELECT COUNT(DISTINCT document_id), COUNT(*) FROM chunks;
+    """)
+    ndocs, nchunks = cur.fetchone()
+    # Random sampling inside a scalar subquery is not allowed in Postgres, so
+    # fetch a random sample first and average the cosine similarities locally.
+    if nchunks > 0:
+        cur.execute("SELECT embedding FROM chunks ORDER BY RANDOM() LIMIT 100")
+        embs = [row[0].to_list() if hasattr(row[0], "to_list") else [float(c) for c in row[0]] for row in cur.fetchall()]
+        arr = np.array(embs, dtype=np.float32)
+        norms = np.linalg.norm(arr, axis=1, keepdims=True) + 1e-9
+        sims = (arr / norms).dot((arr[0] / norms[0]))
+        avg_sim = float(sims.mean())
+    else:
+        avg_sim = 0.0
+    cur.close()
+    return {
+        "total_queries": total,
+        "documents_indexed": ndocs,
+        "chunks_indexed": nchunks,
+        "avg_latency_ms": round(avg_lat, 2),
+        "avg_similarity_score": round(float(avg_sim), 4),
+        "embedding_model": str(embedding_model.model_id) if embedding_model else config.EMBEDDING_MODEL,
+        "embedding_dim": int(embedding_model.dimension) if embedding_model else config.EMBEDDING_DIM,
+        "vector_db_type": "PostgreSQL + pgvector (hnsw)",
+        "retrieval_mode": "hybrid (vector + keyword)",
+        "reranker": config.RERANKER,
+        "similarity_threshold": config.SIMILARITY_THRESHOLD if config.THRESHOLD_ENABLED else None,
+        "llm_provider": str(llm.model_id) if llm else config.LLM_PROVIDER,
+    }
+
+
+# ── Conversation memory (kept separate from knowledge base) ──────────────────
+
+def add_conversation_message(session_id: str, role: str, content: str):
+    conn = db_store.get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO conversation_messages (session_id, role, content) VALUES (%s, %s, %s)",
+        (session_id, role, content),
+    )
+    conn.commit()
+    cur.close()
+
+
+def get_conversation(session_id: str, max_messages: int = 20) -> List[Dict]:
+    conn = db_store.get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT role, content FROM conversation_messages WHERE session_id = %s "
+        "ORDER BY id DESC LIMIT %s",
+        (session_id, max_messages),
+    )
+    rows = list(reversed(cur.fetchall()))
+    cur.close()
+    return [{"role": r, "content": c} for r, c in rows]

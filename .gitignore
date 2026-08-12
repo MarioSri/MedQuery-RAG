@@ -1,3 +1,17 @@
 __pycache__/
 *.pyc
 .env
+
+# Scratch / diagnostic files
+data/
+debug_metrics.py
+repro_findings.md
+repro_hang.py
+repro_issues.py
+smoketest_findings.md
+testsuite_diag.md
+plan_review_findings.md
+fix_verification_evidence.md
+verification_notes.md
+roadmap_notes.md
+medquad_repo.zip
