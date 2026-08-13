@@ -19,6 +19,7 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 LLM_MODEL = os.getenv("LLM_MODEL", "claude-3-5-haiku-latest")          # model id for the chosen provider
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 CUSTOM_BASE_URL = os.getenv("CUSTOM_BASE_URL", "")                       # any OpenAI-compatible endpoint

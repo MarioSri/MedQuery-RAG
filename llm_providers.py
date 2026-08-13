@@ -52,7 +52,10 @@ class AnthropicProvider(LLMProvider):
 class OpenAIProvider(LLMProvider):
     def __init__(self):
         from openai import OpenAI
-        self._client = OpenAI(api_key=config.OPENAI_API_KEY)
+        self._client = OpenAI(
+            base_url=config.OPENAI_API_BASE or None,
+            api_key=config.OPENAI_API_KEY,
+        )
 
     def generate(self, prompt, system="", **kwargs):
         resp = self._client.chat.completions.create(
@@ -119,7 +122,10 @@ class CustomOpenAICompatibleProvider(LLMProvider):
 
     def __init__(self):
         from openai import OpenAI
-        self._client = OpenAI(base_url=config.CUSTOM_BASE_URL, api_key=config.CUSTOM_API_KEY)
+        self._client = OpenAI(
+            base_url=config.CUSTOM_BASE_URL or config.OPENAI_API_BASE or None,
+            api_key=config.CUSTOM_API_KEY or config.OPENAI_API_KEY,
+        )
 
     def generate(self, prompt, system="", **kwargs):
         resp = self._client.chat.completions.create(
