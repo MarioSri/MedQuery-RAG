@@ -44,7 +44,7 @@ Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/MarioSri/MedQuery-RAG.git
-cd MedQuery-RAG/backend
+cd MedQuery-RAG
 pip install -r requirements.txt
 ```
 
@@ -151,4 +151,4 @@ The system targets single-instance deployment and currently has no authenticatio
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for the full text.
