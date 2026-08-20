@@ -217,10 +217,13 @@ def retrieve(query: str, top_k: int = None):
     results = _retrieve_candidates(query)[:top_k]
     if not results:
         return [], []
-    # Scores are always semantic cosine similarity (0..1).
+    # Scores are always semantic cosine similarity (0..1). Filter every
+    # candidate below the evidence threshold so weak matches are not sent to
+    # the LLM or displayed as citations. If no candidate survives, the caller
+    # returns the explicit insufficient-evidence response.
+    if config.THRESHOLD_ENABLED:
+        results = [r for r in results if r[2] >= config.SIMILARITY_THRESHOLD]
     scores = [r[2] for r in results]
-    if config.THRESHOLD_ENABLED and max(scores) < config.SIMILARITY_THRESHOLD:
-        return [], scores
     return results, scores
 
 

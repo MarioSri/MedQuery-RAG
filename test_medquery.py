@@ -212,6 +212,10 @@ class TestQueryEndpoint(unittest.TestCase):
         self.assertIn("Complete Blood Count", body["sources"][0]["doc_title"])
         self.assertGreater(body["similarity_scores"][0],
                            body["similarity_scores"][-1] - 1e-9)
+        self.assertTrue(
+            all(score >= config.SIMILARITY_THRESHOLD for score in body["similarity_scores"]),
+            "returned evidence must meet the configured similarity threshold",
+        )
         self.assertGreater(body["latency_ms"], 0)
         self.assertEqual(body["tokens_used"], 350)  # mock usage
         # Sources carry citation metadata (doc_id, chunk_index, page_number)
