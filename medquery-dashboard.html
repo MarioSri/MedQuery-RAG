@@ -542,6 +542,120 @@
   .toast.show { transform:translateY(0); opacity:1; }
   .toast.success { background:var(--lime); color:#000; }
   .toast.error { background:#ef4444; color:#fff; }
+  /* ── RESPONSIVE SYSTEM ── */
+  .grid > *, .intro-row > * { min-width: 0; }
+  button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 3px solid var(--lime);
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 1100px) {
+    body { padding: 1.25rem 1.5rem 1.5rem; }
+    header { margin-bottom: 1.75rem; }
+    nav { position: static; transform: none; margin-left: auto; }
+    .analytics-main { min-height: 340px; }
+  }
+
+  @media (min-width: 701px) and (max-width: 1100px) {
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .retrieval-col, .analytics-main { grid-column: 1 / -1; }
+    .cash-card, .query-card { grid-column: span 1; min-height: 380px; }
+    .pipeline-card { grid-column: 1 / -1; min-height: 360px; }
+    .analytics-main { gap: 1.25rem; }
+    .analytics-pct { font-size: 4rem; }
+    .donut-wrap { width: 176px; height: 176px; }
+  }
+
+  @media (max-width: 700px) {
+    body { padding: 1rem; }
+    header {
+      align-items: flex-start;
+      gap: .85rem;
+      margin-bottom: 1.25rem;
+    }
+    .logo { font-size: 1.1rem; }
+    nav {
+      order: 3;
+      width: 100%;
+      padding: .2rem;
+      border-radius: 1.1rem;
+      justify-content: stretch;
+    }
+    nav a {
+      flex: 1;
+      text-align: center;
+      padding: .6rem .8rem;
+      font-size: .8rem;
+    }
+    .intro-row {
+      grid-template-columns: 1fr;
+      gap: 1.15rem;
+      padding: 1.25rem;
+      border-radius: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .intro-title { font-size: 1.8rem; }
+    .metric-value { font-size: 1.65rem; }
+    .grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+    .retrieval-col, .analytics-main, .cash-card, .query-card, .pipeline-card {
+      grid-column: 1 / -1;
+    }
+    .card { padding: 1.25rem; border-radius: 1.25rem; }
+    .stat-chunk { height: 124px; padding: 1.25rem; }
+    .stat-chunk .num { font-size: 1.75rem; }
+    .analytics-main {
+      min-height: 0;
+      gap: 1.5rem;
+      flex-direction: column;
+    }
+    .analytics-left, .analytics-right { min-width: 0; flex: none; width: 100%; }
+    .analytics-left { order: 1; }
+    .analytics-right { order: 2; justify-content: flex-start; }
+    .analytics-pct { font-size: 3.35rem; }
+    .analytics-pills { margin-top: 1rem; }
+    .pill { max-width: 100%; white-space: normal; border-radius: .8rem; }
+    .donut-wrap { width: 158px; height: 158px; }
+    .cash-card, .query-card, .pipeline-card { min-height: 350px; }
+    .query-count { font-size: 3rem; }
+    .qa-section { padding: 0 1.25rem 1.25rem; }
+    .qa-input-row { border-radius: 1rem; padding-left: .8rem; }
+    .qa-input { min-width: 0; font-size: 16px; }
+    .qa-send { width: 40px; height: 40px; flex: 0 0 40px; }
+    .chat-scroll { max-height: 220px; }
+    .pipe-row { align-items: flex-start; gap: .75rem; }
+    .pipe-label { max-width: 62%; overflow-wrap: anywhere; }
+    .ring-row { align-items: flex-start; flex-wrap: wrap; }
+    .modal-overlay { align-items: flex-end; }
+    .modal {
+      width: calc(100vw - 1rem);
+      max-width: none;
+      max-height: 90svh;
+      padding: 1.25rem;
+      border-radius: 1.25rem 1.25rem 0 0;
+    }
+    .modal-title { font-size: 1.1rem; }
+    .dropzone { padding: 1.5rem 1rem; }
+    .toast {
+      left: 1rem;
+      right: 1rem;
+      bottom: max(1rem, env(safe-area-inset-bottom));
+      text-align: center;
+    }
+  }
+
+  @media (hover: none) {
+    [data-tip]::after { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: .01ms !important;
+    }
+  }
 </style>
 </head>
 <body>
